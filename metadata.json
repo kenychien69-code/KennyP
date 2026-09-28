@@ -1,0 +1,6 @@
+{
+  "name": "KENNY Brew Intelligence",
+  "description": "An AI-Integrated Point-of-Sale System with Predictive Sales Forecasting for Coffee and Tea Shops, featuring real-time inventory tracking, intelligent restocking, and demand forecasting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
