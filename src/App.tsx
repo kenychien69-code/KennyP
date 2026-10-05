@@ -69,11 +69,19 @@ const INITIAL_STAFF_USERS: User[] = [
     id: 'usr-owner',
     username: 'owner',
     role: 'owner',
-    fullName: 'Shop Owner',
+    fullName: 'Keny Chien',
     roleTitle: 'Shop Owner',
-    status: 'Active',
     lastLogin: 'Today',
     createdAt: '2026-01-01',
+  },
+  {
+    id: 'usr-manager',
+    username: 'manager',
+    role: 'manager',
+    fullName: 'Maria Santos (Store Manager)',
+    roleTitle: 'Store Manager',
+    lastLogin: 'Today',
+    createdAt: '2026-01-02',
   },
 ];
 
@@ -84,13 +92,13 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_USER);
       if (saved) {
         const parsed: any = JSON.parse(saved);
-        if (parsed.role === 'manager' || parsed.username === 'manager') {
-          localStorage.removeItem(STORAGE_KEY_USER);
-          return null;
-        }
         if (parsed.username === 'cashier' && (parsed.fullName === 'Alexander Rivera' || parsed.fullName === 'Cashier Staff')) {
           localStorage.removeItem(STORAGE_KEY_USER);
           return null;
+        }
+        if (parsed.role === 'owner') {
+          parsed.fullName = 'Keny Chien';
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(parsed));
         }
         return parsed as User;
       }
@@ -137,26 +145,29 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_USERS_LIST);
       if (saved) {
         const parsed: any[] = JSON.parse(saved);
-        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['manager', 'cashier']);
-        // Exclude obsolete 'manager' role and initial demo accounts or deleted users
-        const cleaned: User[] = parsed
+        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['cashier']);
+        let cleaned: User[] = parsed
           .filter((u) => {
             const un = (u.username || '').toLowerCase().trim();
             if (deletedSet.has(un)) return false;
-            if ((u.role as string) === 'manager' || un === 'manager') return false;
             if (un === 'cashier' && (u.fullName === 'Alexander Rivera' || u.fullName === 'Cashier Staff')) return false;
             return true;
           })
-          .map((u) => ({
-            ...u,
-            role: (u.role === 'owner' ? 'owner' : 'cashier') as UserRole,
-            roleTitle: u.role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
-          }));
+          .map((u) => {
+            const role: UserRole = u.role === 'owner' ? 'owner' : u.role === 'manager' ? 'manager' : 'cashier';
+            return {
+              ...u,
+              role,
+              roleTitle: role === 'owner' ? 'Shop Owner' : role === 'manager' ? 'Store Manager' : 'Cashier / Barista',
+            };
+          });
 
         // Ensure Shop Owner is always present
         const hasOwner = cleaned.some((u) => u.role === 'owner');
         if (!hasOwner) {
           cleaned.unshift(INITIAL_STAFF_USERS[0]);
+        } else {
+          cleaned = cleaned.map((u) => (u.role === 'owner' ? { ...u, fullName: 'Keny Chien' } : u));
         }
         return cleaned;
       }
@@ -271,7 +282,6 @@ export default function App() {
               const activeRemote = remote.users.filter((u) => {
                 const un = (u.username || '').toLowerCase().trim();
                 if (deletedUsernames.has(un)) return false;
-                if ((u.role as string) === 'manager' || un === 'manager') return false;
                 if (un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera')) return false;
                 return true;
               });
@@ -282,7 +292,6 @@ export default function App() {
                 return (
                   !remoteUsernames.has(un) &&
                   !deletedUsernames.has(un) &&
-                  un !== 'manager' &&
                   !(un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera'))
                 );
               });
@@ -593,8 +602,8 @@ export default function App() {
         id: `usr-${role}`,
         username: role,
         role: role,
-        fullName: role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
-        roleTitle: role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
+        fullName: role === 'owner' ? 'Keny Chien' : role === 'manager' ? 'Store Manager' : 'Cashier / Barista',
+        roleTitle: role === 'owner' ? 'Shop Owner' : role === 'manager' ? 'Store Manager' : 'Cashier / Barista',
       };
     }
     setCurrentUser(matchedUser);

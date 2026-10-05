@@ -154,7 +154,7 @@ INSERT INTO public.categories (id, name, icon, display_order) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.users (id, username, full_name, role, role_title, status) VALUES
-('usr-owner', 'owner', 'Kenny Chien', 'owner', 'Shop Owner & Administrator', 'Active'),
+('usr-owner', 'owner', 'Keny Chien', 'owner', 'Shop Owner & Administrator', 'Active'),
 ('usr-manager', 'manager', 'Store Operations Manager', 'manager', 'Store Manager', 'Active'),
 ('usr-cashier', 'cashier', 'Alexander Rivera', 'cashier', 'Cashier / Barista', 'Active')
 ON CONFLICT (id) DO NOTHING;

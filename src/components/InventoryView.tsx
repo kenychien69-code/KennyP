@@ -387,8 +387,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
       {/* Toast Notification */}
       {notification && (
-        <div className="p-3 bg-[#EBF8F1] border border-[#A4E0BE] text-[#1E5638] rounded-lg text-xs font-medium flex items-center gap-2 animate-in slide-in-from-top-1">
-          <CheckCircle2 className="w-4 h-4 text-[#1E5638]" />
+        <div className="p-3 bg-[#FAF5EE] border border-[#E8DFC8] text-[#4A2E20] rounded-lg text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-top-1 shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-[#8A4A28]" />
           <span>{notification}</span>
         </div>
       )}
@@ -485,15 +485,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => onToggleProductAvailability && onToggleProductAvailability(p.id)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer shrink-0 ${
+                      className={`text-[10px] font-extrabold tracking-wider uppercase transition-opacity cursor-pointer shrink-0 bg-transparent border-0 p-0 hover:opacity-75 flex items-center gap-1.5 ${
                         p.isAvailable
-                          ? 'bg-[#E6F4EA] text-[#137333] border-[#A8DAB5] hover:bg-[#D5EEDC]'
-                          : 'bg-[#FEE2E2] text-[#DC2626] border-[#FCA5A5] hover:bg-[#FCD5D5]'
+                          ? 'text-[#8A4A28]'
+                          : 'text-[#A89078] line-through'
                       }`}
                       title="Click to toggle in-stock / sold out at POS"
                     >
-                      {p.isAvailable ? 'AVAILABLE' : 'SOLD OUT'}
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          p.isAvailable ? 'bg-[#8A4A28]' : 'bg-[#A89078]'
+                        }`}
+                      />
+                      <span>{p.isAvailable ? 'AVAILABLE' : 'SOLD OUT'}</span>
                     </button>
                   </div>
 
@@ -665,14 +671,23 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded ${
+                            className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-transparent border-0 p-0 ${
                               isCritical
-                                ? 'bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA]'
+                                ? 'text-[#B91C1C]'
                                 : isLow
-                                ? 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
-                                : 'bg-[#EAF5EC] text-[#1E7036] border border-[#C5E5CB]'
+                                ? 'text-[#B45309]'
+                                : 'text-[#8A4A28]'
                             }`}
                           >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isCritical
+                                  ? 'bg-[#B91C1C]'
+                                  : isLow
+                                  ? 'bg-[#B45309]'
+                                  : 'bg-[#8A4A28]'
+                              }`}
+                            />
                             {isCritical ? 'Critical Low' : isLow ? 'Low Stock' : 'In Stock'}
                           </span>
                         </td>

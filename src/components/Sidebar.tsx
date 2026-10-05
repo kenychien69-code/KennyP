@@ -85,17 +85,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Role permissions:
   // - Cashier / Barista: Focused on customer register / POS transactions
-  // - Shop Owner: Executive store control across all modules (Admin + Owner)
+  // - Store Manager & Shop Owner: Executive store control across all modules
   let roleTabKeys: NavTab[] = [];
   if (currentUser.role === 'cashier') {
     roleTabKeys = ['pos'];
   } else {
-    // Shop Owner has full access to all areas including Staff Management
+    // Shop Owner & Store Manager have access to all store operational modules
     roleTabKeys = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast', 'users'];
   }
 
   const roleTitleMap: Record<UserRole, string> = {
     owner: 'Shop Owner',
+    manager: 'Store Manager',
     cashier: 'Cashier / Barista',
   };
 

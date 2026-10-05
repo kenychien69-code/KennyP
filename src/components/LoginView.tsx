@@ -38,7 +38,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
     setIsLoading(true);
 
     // 1. Check if Shop Owner / Admin account
-    if (cleanUsername === 'owner' || cleanUsername === 'admin' || cleanUsername === 'shopowner') {
+    if (
+      cleanUsername === 'owner' ||
+      cleanUsername === 'admin' ||
+      cleanUsername === 'shopowner' ||
+      cleanUsername === 'kenychien' ||
+      cleanUsername === 'kenychien69'
+    ) {
       if (!ACCEPTED_PASSWORDS.includes(cleanPassword)) {
         setIsLoading(false);
         setError('Incorrect password. Please verify your credentials.');
@@ -49,9 +55,26 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
         id: 'usr-owner',
         username: 'owner',
         role: 'owner',
-        fullName: 'Shop Owner',
+        fullName: 'Keny Chien',
         roleTitle: 'Shop Owner',
-        status: 'Active',
+      });
+      return;
+    }
+
+    // 1.5 Check if default/demo Store Manager account
+    if (cleanUsername === 'manager' || cleanUsername === 'storemanager') {
+      if (!ACCEPTED_PASSWORDS.includes(cleanPassword)) {
+        setIsLoading(false);
+        setError('Incorrect password. Please verify your credentials.');
+        return;
+      }
+
+      onLoginSuccess({
+        id: 'usr-manager',
+        username: 'manager',
+        role: 'manager',
+        fullName: 'Maria Santos (Store Manager)',
+        roleTitle: 'Store Manager',
       });
       return;
     }
@@ -62,12 +85,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
     );
 
     if (staffMatch) {
-      if (staffMatch.status === 'Inactive') {
-        setIsLoading(false);
-        setError('This staff account is currently inactive. Please contact the Shop Owner.');
-        return;
-      }
-
       // Check user specific password or accepted default passwords
       const validPasswords = [
         ...(staffMatch.password ? [staffMatch.password.trim()] : []),
@@ -85,8 +102,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
         username: staffMatch.username,
         role: staffMatch.role,
         fullName: staffMatch.fullName,
-        roleTitle: staffMatch.roleTitle || (staffMatch.role === 'owner' ? 'Shop Owner' : 'Cashier / Barista'),
-        status: staffMatch.status || 'Active',
+        roleTitle:
+          staffMatch.roleTitle ||
+          (staffMatch.role === 'owner'
+            ? 'Shop Owner'
+            : staffMatch.role === 'manager'
+            ? 'Store Manager'
+            : 'Cashier / Barista'),
       });
       return;
     }

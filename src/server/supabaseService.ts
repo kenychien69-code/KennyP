@@ -38,11 +38,10 @@ function saveJson(file: string, data: any) {
   }
 }
 
-// Deleted usernames tracking: demo accounts manager and cashier are ALWAYS marked as deleted
+// Deleted usernames tracking
 export function loadDeletedUsernames(): Set<string> {
-  const list = loadJson<string[]>(DELETED_USERS_FILE, ['manager', 'cashier']);
+  const list = loadJson<string[]>(DELETED_USERS_FILE, ['cashier']);
   const s = new Set(list.map((u) => u.toLowerCase().trim()));
-  s.add('manager');
   s.add('cashier');
   return s;
 }
@@ -57,8 +56,6 @@ export function loadStaffUsers(): any[] {
   const users = loadJson<any[]>(STAFF_USERS_FILE, []);
   return users.filter(
     (u) =>
-      u.role !== 'manager' &&
-      u.username?.toLowerCase() !== 'manager' &&
       u.username?.toLowerCase() !== 'cashier'
   );
 }
@@ -66,7 +63,7 @@ export function loadStaffUsers(): any[] {
 export function saveStaffUser(user: any) {
   const users = loadStaffUsers();
   const cleanUsername = (user.username || '').toLowerCase().trim();
-  if (!cleanUsername || cleanUsername === 'manager' || cleanUsername === 'cashier') return;
+  if (!cleanUsername || cleanUsername === 'cashier') return;
 
   const idx = users.findIndex((u) => u.username?.toLowerCase().trim() === cleanUsername);
   if (idx >= 0) {
@@ -76,9 +73,9 @@ export function saveStaffUser(user: any) {
   }
   saveJson(STAFF_USERS_FILE, users);
 
-  const deleted = loadJson<string[]>(DELETED_USERS_FILE, ['manager', 'cashier']);
+  const deleted = loadJson<string[]>(DELETED_USERS_FILE, ['cashier']);
   const filtered = deleted.filter(
-    (u) => u.toLowerCase().trim() !== cleanUsername || cleanUsername === 'manager' || cleanUsername === 'cashier'
+    (u) => u.toLowerCase().trim() !== cleanUsername || cleanUsername === 'cashier'
   );
   saveJson(DELETED_USERS_FILE, filtered);
 }
@@ -437,11 +434,18 @@ export async function pullAllFromSupabase() {
       (u.email || '').toLowerCase().startsWith('owner@')
   );
 
+  const ownerName =
+    rawOwner?.name &&
+    rawOwner.name !== 'Shop Owner' &&
+    rawOwner.name !== 'Kenny Chien (Shop Owner)'
+      ? rawOwner.name
+      : 'Keny Chien';
+
   const shopOwnerUser = {
     id: rawOwner?.user_id != null ? `usr-${rawOwner.user_id}` : 'usr-owner',
     username: 'owner',
     role: 'owner' as UserRole,
-    fullName: rawOwner?.name || rawOwner?.full_name || 'Shop Owner',
+    fullName: ownerName,
     roleTitle: 'Shop Owner',
     status: 'Active' as const,
     lastLogin: 'Today',
@@ -451,19 +455,42 @@ export async function pullAllFromSupabase() {
   const usersMap = new Map<string, any>();
   usersMap.set('owner', shopOwnerUser);
 
+  // 1. Add staff users retrieved directly from Supabase 'users' table
+  for (const ru of rawUsers) {
+    const email = (ru.email || '').toLowerCase().trim();
+    const roleRaw = (ru.role || '').toLowerCase().trim();
+    const username = (ru.username || (email.includes('@') ? email.split('@')[0] : email) || `staff_${ru.user_id || ru.id}`).toLowerCase().trim();
+    if (!username || deletedUsers.has(username) || username === 'owner') continue;
+
+    const role: UserRole = roleRaw === 'manager' ? 'manager' : roleRaw === 'owner' ? 'owner' : 'cashier';
+    usersMap.set(username, {
+      id: ru.user_id != null ? `usr-${ru.user_id}` : (ru.id ? String(ru.id) : `usr-${username}`),
+      username,
+      role,
+      fullName: ru.name || ru.full_name || username,
+      roleTitle: role === 'manager' ? 'Store Manager' : role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
+      lastLogin: ru.last_login || ru.lastLogin || 'Today',
+      createdAt: ru.created_at ? ru.created_at.split('T')[0] : '2026-01-01',
+      password: ru.password || 'kenny123',
+    });
+  }
+
+  // 2. Overlay any locally cached custom staff
   for (const staff of customStaff) {
     const un = (staff.username || '').toLowerCase().trim();
-    if (un && !deletedUsers.has(un) && un !== 'manager' && un !== 'cashier') {
+    if (un && !deletedUsers.has(un) && un !== 'owner') {
+      const role: UserRole = staff.role === 'manager' ? 'manager' : staff.role === 'owner' ? 'owner' : 'cashier';
       usersMap.set(un, {
         id: staff.id || `usr-${un}`,
         username: staff.username,
-        role: staff.role || 'cashier',
+        role: role,
         fullName: staff.fullName || 'Staff Member',
-        roleTitle: staff.roleTitle || 'Cashier / Barista',
-        status: staff.status || 'Active',
+        roleTitle:
+          staff.roleTitle ||
+          (role === 'manager' ? 'Store Manager' : role === 'owner' ? 'Shop Owner' : 'Cashier / Barista'),
         lastLogin: staff.lastLogin || 'Never',
         createdAt: staff.createdAt || new Date().toISOString().split('T')[0],
-        password: staff.password,
+        password: staff.password || 'kenny123',
       });
     }
   }
@@ -602,13 +629,24 @@ export async function pushAllToSupabase(payload: {
   if (payload.users?.length) {
     const validStaff = payload.users.filter(
       (u) =>
-        u.role !== 'manager' &&
-        u.username?.toLowerCase() !== 'manager' &&
         u.username?.toLowerCase() !== 'cashier' &&
         u.username?.toLowerCase() !== 'owner'
     );
     for (const st of validStaff) {
       saveStaffUser(st);
+      try {
+        const cleanUsername = st.username.toLowerCase().trim();
+        const cleanEmail = `${cleanUsername}@kennybrew.com`;
+        const userRow: any = {
+          name: st.fullName,
+          email: cleanEmail,
+          role: st.role,
+          password: st.password || 'kenny123',
+        };
+        await client.from('users').upsert(userRow, { onConflict: 'email' });
+      } catch (err) {
+        console.warn('Staff user push to Supabase table notice:', err);
+      }
     }
   }
 
@@ -776,52 +814,118 @@ export async function deleteSupabaseIngredient(id: string) {
   return { ok: true, deleted: id };
 }
 
+export async function recordSupabaseStockAdjustment(payload: {
+  productId: number | string;
+  quantityChange: number;
+  transactionType?: 'Restock' | 'Adjustment' | 'Waste' | 'Sale';
+}) {
+  const client = getSupabase();
+  if (!client) return { ok: true };
+
+  const prodId = parseInt(String(payload.productId).replace(/\D/g, '')) || 1;
+  const change = Number(payload.quantityChange) || 0;
+  const transType = payload.transactionType || (change >= 0 ? 'Restock' : 'Adjustment');
+
+  try {
+    // 1. Insert transaction into `inventory` table
+    const invRes = await client.from('inventory').insert([{
+      product_id: prodId,
+      quantity_change: change,
+      transaction_type: transType,
+      date: new Date().toISOString(),
+    }]).select();
+
+    // 2. Update `stock_qty` in `products` table
+    const { data: prodData } = await client
+      .from('products')
+      .select('stock_qty')
+      .eq('product_id', prodId)
+      .limit(1);
+
+    if (prodData && prodData[0]) {
+      const currentStock = Number(prodData[0].stock_qty) || 0;
+      const newStock = Math.max(0, currentStock + change);
+      await client
+        .from('products')
+        .update({
+          stock_qty: newStock,
+          status: newStock > 0 ? 'Available' : 'Sold Out',
+        })
+        .eq('product_id', prodId);
+    }
+
+    return { ok: true, data: invRes.data };
+  } catch (err: any) {
+    console.warn('Stock adjustment notice:', err);
+    return { ok: true, warning: err.message };
+  }
+}
+
 export async function upsertSupabaseUser(user: any) {
   saveStaffUser(user);
   const client = getSupabase();
   if (!client) return { ok: true, user };
 
-  let numId = parseInt(String(user.id).replace(/\D/g, ''));
-  if (isNaN(numId) || numId > 2147483647 || numId <= 0) {
-    numId = NaN;
-  }
-
-  const payload: any = {
-    name: user.fullName,
-    email: `${user.username}@kennybrew.com`,
-    password: user.password || 'kenny123',
-    role: user.role,
-  };
+  const cleanUsername = (user.username || '').toLowerCase().trim();
+  const cleanEmail = `${cleanUsername}@kennybrew.com`;
+  const cleanFullName = user.fullName || user.name || cleanUsername;
+  const role = user.role || 'cashier';
+  const password = user.password || 'kenny123';
 
   try {
-    if (!isNaN(numId)) {
-      payload.user_id = numId;
-      const res = await client.from('users').upsert(payload).select();
-      if (!res.error && res.data && res.data.length > 0) return res;
-    }
+    // 1. Check if user already exists by email in Supabase
+    let existingUser: any = null;
+    try {
+      const { data } = await client
+        .from('users')
+        .select('*')
+        .or(`email.eq.${cleanEmail},email.eq.${cleanUsername}`)
+        .limit(1);
+      if (data && data.length > 0) {
+        existingUser = data[0];
+      }
+    } catch {}
 
-    const { data: existing } = await client
-      .from('users')
-      .select('*')
-      .or(`role.eq.${user.role},email.eq.${user.username}@kennybrew.com`)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
+    if (existingUser) {
+      const targetId = existingUser.user_id != null ? existingUser.user_id : existingUser.id;
+      const updatePayload: any = {
+        name: cleanFullName,
+        role: role,
+        password: password,
+      };
+      const keyColumn = existingUser.user_id != null ? 'user_id' : 'id';
       const updated = await client
         .from('users')
-        .update({
-          name: user.fullName,
-          role: user.role,
-        })
-        .eq('user_id', existing[0].user_id)
+        .update(updatePayload)
+        .eq(keyColumn, targetId)
         .select();
       return updated;
     }
 
-    delete payload.user_id;
-    return await client.from('users').insert([payload]).select();
-  } catch (err) {
-    // If Supabase RLS limits user insertion, local persistence in staff_users.json guarantees it works
+    // 2. Otherwise insert new staff record into Supabase 'users' table
+    const insertPayload: any = {
+      name: cleanFullName,
+      email: cleanEmail,
+      role: role,
+      password: password,
+    };
+
+    const insertRes = await client.from('users').insert([insertPayload]).select();
+    if (insertRes.error) {
+      console.warn('Supabase users insert error:', insertRes.error);
+      try {
+        const altPayload: any = {
+          username: cleanUsername,
+          name: cleanFullName,
+          role: role,
+          password: password,
+        };
+        return await client.from('users').insert([altPayload]).select();
+      } catch {}
+    }
+    return insertRes;
+  } catch (err: any) {
+    console.warn('upsertSupabaseUser notice:', err);
     return { ok: true, user };
   }
 }
@@ -831,8 +935,14 @@ export async function deleteSupabaseUser(username: string) {
   const client = getSupabase();
   if (!client) return { ok: true, deleted: username };
 
+  const cleanUsername = username.toLowerCase().trim();
+  const cleanEmail = `${cleanUsername}@kennybrew.com`;
+
   try {
-    await client.from('users').delete().or(`role.eq.${username},email.eq.${username}@kennybrew.com`);
+    await client
+      .from('users')
+      .delete()
+      .or(`email.eq.${cleanEmail},email.eq.${cleanUsername}`);
   } catch {}
   return { ok: true, deleted: username };
 }
@@ -883,7 +993,7 @@ export async function insertSupabaseOrder(payload: {
 
     const orderId = createdOrder.order_id;
 
-    // 3. Insert items into `orders_items`
+    // 3. Insert items into `orders_items` table
     if (order.items && order.items.length > 0) {
       const itemsToInsert = order.items.map((it: any) => {
         const prodId = parseInt(String(it.product.id).replace(/\D/g, '')) || 1;
@@ -902,6 +1012,45 @@ export async function insertSupabaseOrder(payload: {
 
       if (itemsError) {
         console.error('Error inserting into orders_items table:', itemsError);
+      }
+
+      // 4. Record stock deductions into `inventory` table and update `products.stock_qty`
+      for (const it of order.items) {
+        const prodId = parseInt(String(it.product.id).replace(/\D/g, '')) || 1;
+        const qty = Number(it.quantity) || 1;
+
+        try {
+          await client.from('inventory').insert([{
+            product_id: prodId,
+            quantity_change: -qty,
+            transaction_type: 'Sale',
+            date: order.createdAt || new Date().toISOString(),
+          }]);
+        } catch (invErr) {
+          console.warn('Inventory log notice:', invErr);
+        }
+
+        try {
+          const { data: prodData } = await client
+            .from('products')
+            .select('stock_qty')
+            .eq('product_id', prodId)
+            .limit(1);
+
+          if (prodData && prodData[0]) {
+            const currentStock = Number(prodData[0].stock_qty) || 100;
+            const newStock = Math.max(0, currentStock - qty);
+            await client
+              .from('products')
+              .update({
+                stock_qty: newStock,
+                status: newStock > 0 ? 'Available' : 'Sold Out',
+              })
+              .eq('product_id', prodId);
+          }
+        } catch (stockErr) {
+          console.warn('Product stock update notice:', stockErr);
+        }
       }
     }
 

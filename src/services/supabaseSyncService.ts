@@ -6,6 +6,7 @@ import {
   Product,
   User,
 } from '../types';
+import { getSupabaseClient, getStoredSupabaseConfig } from '../lib/supabase';
 
 export interface SupabaseSyncStatus {
   connected: boolean;
@@ -210,20 +211,53 @@ export class SupabaseSyncService {
     }
   }
 
-  // 9. Users: Automatic Upsert
-  async syncUserUpsert(user: User) {
+  // 8.5 Inventory: Automatic Stock Movement & Adjustment Log
+  async syncStockAdjustment(productId: number | string, quantityChange: number, transactionType: 'Restock' | 'Adjustment' | 'Waste' | 'Sale' = 'Restock') {
     try {
-      const res = await fetch('/api/supabase/user', {
+      await fetch('/api/supabase/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(user),
+        body: JSON.stringify({
+          productId,
+          quantityChange,
+          transactionType,
+        }),
       });
       this.notify({
         lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
-      if (res.ok) {
-        return await res.json();
+    } catch (err) {
+      console.warn('Auto-sync inventory movement failed:', err);
+    }
+  }
+
+  // 9. Users: Automatic Upsert
+  async syncUserUpsert(user: User) {
+    try {
+      // 1. Send to Express backend API
+      await fetch('/api/supabase/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user),
+      }).catch(() => {});
+
+      // 2. Direct client-side write to Supabase 'users' table (for Vercel serverless / static hosting)
+      const directClient = getSupabaseClient();
+      if (directClient) {
+        const cleanUsername = (user.username || '').toLowerCase().trim();
+        const cleanEmail = `${cleanUsername}@kennybrew.com`;
+        const payload: any = {
+          name: user.fullName,
+          email: cleanEmail,
+          role: user.role,
+          password: user.password || 'kenny123',
+        };
+        await directClient.from('users').upsert(payload);
       }
+
+      this.notify({
+        lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      });
     } catch (err) {
       console.warn('Auto-sync user failed:', err);
     }
@@ -232,9 +266,26 @@ export class SupabaseSyncService {
   // 10. Users: Automatic Delete
   async syncUserDelete(username: string) {
     try {
+      // 1. Send to Express backend API
       await fetch(`/api/supabase/user/${username}`, {
         method: 'DELETE',
-      });
+      }).catch(() => {});
+
+      // 2. Direct client-side delete from Supabase 'users' table
+      const { url, anonKey } = getStoredSupabaseConfig();
+      if (url && anonKey) {
+        const cleanUsername = username.toLowerCase().trim();
+        const cleanEmail = `${cleanUsername}@kennybrew.com`;
+        const baseUrl = url.replace(/\/$/, '');
+        await fetch(`${baseUrl}/rest/v1/users?email=eq.${cleanEmail}`, {
+          method: 'DELETE',
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${anonKey}`,
+          },
+        }).catch(() => {});
+      }
+
       this.notify({
         lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });

@@ -110,8 +110,8 @@ export const LowStockAlertsView: React.FC<LowStockAlertsViewProps> = ({
 
       {/* Success Notification */}
       {successToast && (
-        <div className="p-3 bg-[#EBF8F1] border border-[#A4E0BE] text-[#1E5638] rounded-lg text-xs font-medium flex items-center gap-2 animate-in slide-in-from-top-1">
-          <CheckCircle2 className="w-4 h-4 text-[#1E5638]" />
+        <div className="p-3 bg-[#FAF5EE] border border-[#E8DFC8] text-[#4A2E20] rounded-lg text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-top-1 shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-[#8A4A28]" />
           <span>{successToast}</span>
         </div>
       )}
@@ -129,7 +129,7 @@ export const LowStockAlertsView: React.FC<LowStockAlertsViewProps> = ({
           </div>
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              alertCount > 0 ? 'bg-[#FEE2E2] text-[#DC2626]' : 'bg-[#E6F4EA] text-[#137333]'
+              alertCount > 0 ? 'bg-[#FEE2E2] text-[#DC2626]' : 'bg-[#FAF5EE] text-[#8A4A28]'
             }`}
           >
             {alertCount > 0 ? <ShieldAlert className="w-5 h-5" /> : <PackageCheck className="w-5 h-5" />}

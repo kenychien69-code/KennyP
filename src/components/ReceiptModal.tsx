@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, Copy, Check, X } from 'lucide-react';
 import { Order } from '../types';
-import receiptLogo from '../assets/images/receipt_logo_1791026944711.jpg';
+import { LatteArtLogo } from './LatteArtLogo';
 
 interface ReceiptModalProps {
   order: Order | null;
@@ -11,7 +11,7 @@ interface ReceiptModalProps {
 }
 
 // Thermal receipt barcode generator matching authentic receipt printouts
-const ThermalBarcode: React.FC<{ seed?: number; height?: number }> = ({ seed = 1, height = 36 }) => {
+const ThermalBarcode: React.FC<{ seed?: number; height?: number }> = ({ seed = 1, height = 34 }) => {
   const pattern = [
     2, 1, 3, 1, 1, 2, 4, 1, 2, 3, 1, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 4, 1,
     2, 1, 3, 1, 2, 4, 1, 3, 1, 1, 2, 3, 1, 4, 2, 1, 1, 3, 2, 1, 4, 1, 2, 1,
@@ -31,8 +31,8 @@ const ThermalBarcode: React.FC<{ seed?: number; height?: number }> = ({ seed = 1
   return (
     <div className="w-full flex justify-center py-0.5">
       <svg
-        className="w-56 h-9 overflow-hidden"
-        viewBox="0 0 200 36"
+        className="w-56 h-8 overflow-hidden"
+        viewBox="0 0 200 34"
         preserveAspectRatio="none"
       >
         {bars.map((bar, i) => (
@@ -42,7 +42,7 @@ const ThermalBarcode: React.FC<{ seed?: number; height?: number }> = ({ seed = 1
             y="0"
             width={bar.width}
             height={height}
-            fill="#111111"
+            fill="#2A1810"
           />
         ))}
       </svg>
@@ -59,7 +59,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  // Standard VAT breakdown computation
+  // Standard Philippine VAT breakdown computation
   const vatableSales = order.totalAmount / 1.12;
   const vat12 = order.totalAmount - vatableSales;
 
@@ -67,7 +67,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     order.cashierName && order.cashierName !== 'Cashier Staff'
       ? order.cashierName
       : 'Store Cashier';
-  const cashierFirstName = cashierName.split(' ')[0] || 'Cashier';
 
   const orderDate = new Date(order.createdAt);
   const dateFormatted = `${String(orderDate.getMonth() + 1).padStart(2, '0')}/${String(
@@ -86,32 +85,50 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const handleCopyTextReceipt = () => {
     const textLines = [
-      '              Riverside Retail Park',
-      '               Phone: 0161 250 6307',
-      '                  STORE # 63225',
-      '               VAT No: 273 5224 09',
-      '',
-      `1002 ${cashierFirstName}`,
+      '================================================',
+      '           KENNY BREW INTELLIGENCE',
+      '             Poblacion  5, Mid Cot',
+      '          Tel: (064) 421-8988 / 0917-123-4567',
+      '               TIN: 432-876-109-000',
+      '           BIR Permit: FP-10-2026-00459',
+      '================================================',
+      `Order #: ${order.orderNumber}          Type: ${order.orderType || 'Dine In'}`,
+      `Date: ${dateFormatted}        Time: ${timeFormatted}`,
+      `Cashier: ${cashierName}`,
+      order.customerName ? `Customer: ${order.customerName}` : '',
       '------------------------------------------------',
-      `Chk ${order.orderNumber}`,
+      'ITEMS / PARTICULARS                       AMOUNT',
       '------------------------------------------------',
       ...order.items.flatMap((it) => [
-        `${(it.size ? `${it.size} ` : '') + it.product.name}   ₱${it.lineTotal.toFixed(2)}`,
-        ...it.addons.map((add) => `  ${add}`),
+        `${it.quantity}x ${it.size ? `${it.size} ` : ''}${it.product.name}`.padEnd(35) +
+          `₱${it.lineTotal.toFixed(2)}`,
+        ...(it.sweetness || it.ice
+          ? [`   · ${[it.sweetness, it.ice].filter(Boolean).join(' · ')}`]
+          : []),
+        ...it.addons.map((add) => `   + ${add} (₱20.00)`),
       ]),
-      '',
+      '------------------------------------------------',
       `SUBTOTAL                                ₱${order.subtotal.toFixed(2)}`,
-      `TAX (12%)                               ₱${vat12.toFixed(2)}`,
+      order.discountAmount > 0
+        ? `DISCOUNT (${order.discountType})             -₱${order.discountAmount.toFixed(2)}`
+        : '',
+      `VATABLE SALES (Net)                     ₱${vatableSales.toFixed(2)}`,
+      `VAT (12%)                               ₱${vat12.toFixed(2)}`,
       '================================================',
-      `TOTAL                                   ₱${order.totalAmount.toFixed(2)}`,
-      '------------------------------------------------',
-      `DATE: ${dateFormatted}   TIME: ${timeFormatted}`,
+      `TOTAL AMOUNT DUE                        ₱${order.totalAmount.toFixed(2)}`,
+      '================================================',
+      `PAYMENT METHOD: ${order.paymentMethod || 'Cash'}`,
+      `AMOUNT TENDERED:                        ₱${(order.amountPaid || order.totalAmount).toFixed(2)}`,
+      `CHANGE:                                 ₱${(order.changeAmount || 0).toFixed(2)}`,
       '------------------------------------------------',
       '               ||||| |||||| | |||| |||',
-      '               ||||| |||||| | |||| |||',
+      `               REF: KB-${order.orderNumber}-${Date.now().toString().slice(-4)}`,
       '------------------------------------------------',
-      '       Thank you for visiting Kenny Brew',
-    ];
+      '      Thank you for visiting Kenny Brew!',
+      '             Poblacion  5, Mid Cot',
+      '        Free Wi-Fi: KennyBrew_Guest (pass: kenny123)',
+      '   THIS SERVES AS YOUR OFFICIAL SALES INVOICE',
+    ].filter(Boolean);
 
     navigator.clipboard.writeText(textLines.join('\n'));
     setCopied(true);
@@ -142,7 +159,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             box-shadow: none !important;
             border: none !important;
             background: #fff !important;
-            color: #000 !important;
+            color: #2A1810 !important;
           }
           .no-print {
             display: none !important;
@@ -151,13 +168,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       `}</style>
 
       {/* Main Container Card */}
-      <div className="relative w-full max-w-[390px] my-auto flex flex-col items-center">
+      <div className="relative w-full max-w-[395px] my-auto flex flex-col items-center">
         {/* Top Control Bar (Non-printable) */}
         <div className="no-print w-full flex items-center justify-between mb-3 text-white px-1">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-xs font-semibold tracking-wide uppercase text-amber-200 font-mono">
-              Thermal Receipt
+            <span className="w-2.5 h-2.5 rounded-full bg-[#D4A373] animate-pulse"></span>
+            <span className="text-xs font-semibold tracking-wide uppercase text-[#F3E7DC] font-mono">
+              Official Thermal Receipt
             </span>
           </div>
           <button
@@ -172,150 +189,213 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         {/* The Authentic Thermal Receipt paper slip */}
         <div
           id="printable-thermal-receipt"
-          className="w-full bg-[#FCFCF9] text-[#111111] shadow-2xl border border-[#DDD5C7] rounded-sm py-7 px-6 select-text font-mono relative leading-relaxed text-xs"
+          className="w-full bg-[#FAF7F2] text-[#2A1810] shadow-2xl border border-[#D8C7B5] rounded-sm py-6 px-6 select-text font-mono relative leading-relaxed text-xs"
           style={{
             fontFamily: '"Courier New", Courier, monospace, monospace',
             letterSpacing: '-0.01em',
           }}
         >
           {/* Subtle thermal paper texture header accent */}
-          <div className="space-y-4">
-            {/* 1. TOP LOGO: Halftone Smiling Woman with Peace Sign */}
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative w-44 overflow-hidden flex items-center justify-center">
-                <img
-                  src={receiptLogo}
-                  alt="Kenny Brew Logo"
-                  className="w-40 h-auto object-contain filter contrast-125 grayscale"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/receipt-logo.jpg';
-                  }}
-                />
+          <div className="space-y-3.5">
+            {/* 1. STORE LOGO & EMBLEM (Dark Brown matching system theme) */}
+            <div className="flex flex-col items-center justify-center pt-1 text-center">
+              <div className="w-12 h-12 rounded-full border-2 border-[#2A1810] flex items-center justify-center p-1.5 mb-1.5 shadow-2xs">
+                <LatteArtLogo className="w-9 h-9" />
+              </div>
+              <h2 className="text-base font-extrabold tracking-wider text-[#2A1810] uppercase leading-none">
+                KENNY BREW
+              </h2>
+              <span className="text-[10px] font-bold tracking-widest text-[#4A2E20] uppercase mt-0.5">
+                INTELLIGENCE
+              </span>
+              <span className="text-[9.5px] text-[#5C3A28] italic mt-0.5">
+                Specialty Coffee & POS Intelligence
+              </span>
+            </div>
+
+            {/* 2. STORE LOCATION & TAX INFORMATION */}
+            <div className="text-center space-y-0.5 text-[11.5px] leading-tight font-medium text-[#2A1810]">
+              <div className="font-extrabold text-[12.5px] text-[#2A1810] tracking-tight">
+                Poblacion  5, Mid Cot
+              </div>
+              <div className="text-[11px] text-[#4A2E20]">
+                Contact: +63 917 123 4567 · (064) 421-8988
+              </div>
+              <div className="text-[10.5px] text-[#5C3A28] tracking-wider pt-0.5">
+                TIN: 432-876-109-000 VAT Reg.
+              </div>
+              <div className="text-[10.5px] text-[#5C3A28]">
+                BIR Permit: FP-10-2026-00459
               </div>
             </div>
 
-            {/* 2. STORE HEADER (Center aligned) */}
-            <div className="text-center space-y-0.5 pt-1 text-[13px] leading-tight font-medium text-[#111111]">
-              <div className="font-bold tracking-tight text-[13.5px]">Riverside Retail Park</div>
-              <div className="text-[12.5px]">Phone: 0161 250 6307</div>
-              <div className="text-[12.5px] tracking-wide">STORE # 63225</div>
-              <div className="text-[12.5px]">VAT No: 273 5224 09</div>
-            </div>
+            {/* SOLID DIVIDER */}
+            <div className="border-b border-[#2A1810]/40 my-1" />
 
-            {/* 3. CASHIER LINE (Left aligned) */}
-            <div className="pt-2 text-[13.5px] font-medium text-[#111111]">
-              1002 {cashierFirstName}
+            {/* 3. TRANSACTION METADATA */}
+            <div className="text-[12px] text-[#2A1810] space-y-1">
+              <div className="flex justify-between items-baseline font-bold">
+                <span>ORDER #: {order.orderNumber}</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded border border-[#2A1810]/30 uppercase">
+                  {order.orderType || 'Dine In'}
+                </span>
+              </div>
+              <div className="flex justify-between items-baseline text-[11px] text-[#4A2E20]">
+                <span>DATE: {dateFormatted}</span>
+                <span>TIME: {timeFormatted}</span>
+              </div>
+              <div className="flex justify-between items-baseline text-[11px] text-[#4A2E20]">
+                <span>CASHIER: {cashierName}</span>
+                {order.customerName && (
+                  <span className="truncate max-w-[140px]">
+                    CUST: {order.customerName}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* DASHED DIVIDER */}
-            <div className="border-b border-dashed border-[#888888] my-1" />
+            <div className="border-b border-dashed border-[#2A1810]/40 my-1" />
 
-            {/* 4. CHECK NUMBER */}
-            <div className="text-[13.5px] font-medium text-[#111111]">
-              Chk {order.orderNumber}
+            {/* 4. ITEM LIST HEADER */}
+            <div className="flex justify-between text-[11px] font-bold text-[#2A1810] uppercase tracking-wider pb-0.5">
+              <span>ITEMS / PARTICULARS</span>
+              <span>AMOUNT</span>
             </div>
 
             {/* DASHED DIVIDER */}
-            <div className="border-b border-dashed border-[#888888] my-1" />
+            <div className="border-b border-dashed border-[#2A1810]/40 -mt-1 mb-1" />
 
-            {/* 5. ITEM LIST */}
-            <div className="space-y-2 text-[13px] pt-1">
+            {/* 5. ITEMIZED CART BREAKDOWN */}
+            <div className="space-y-2 text-[12.5px] pt-0.5">
               {order.items.map((it, idx) => (
                 <div key={idx} className="space-y-0.5">
-                  <div className="flex justify-between items-baseline">
-                    <span className="font-medium text-[#111111] pr-2">
-                      {it.size ? `${it.size} ` : ''}
+                  <div className="flex justify-between items-baseline text-[#2A1810]">
+                    <span className="font-bold pr-2 leading-snug">
+                      {it.quantity}x {it.size ? `${it.size} ` : ''}
                       {it.product.name}
-                      {it.quantity > 1 ? ` x${it.quantity}` : ''}
                     </span>
-                    <span className="font-medium tabular-nums text-right whitespace-nowrap text-[#111111]">
+                    <span className="font-bold tabular-nums text-right whitespace-nowrap">
                       ₱{it.lineTotal.toFixed(2)}
                     </span>
                   </div>
 
-                  {/* Add-on rows indented */}
+                  {/* Modifiers: Sweetness & Ice */}
+                  {(it.sweetness || it.ice) && (
+                    <div className="text-[11px] text-[#5C3A28] pl-3.5 italic">
+                      {[it.sweetness, it.ice].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+
+                  {/* Add-ons list */}
                   {it.addons &&
                     it.addons.map((add, aIdx) => (
                       <div
                         key={aIdx}
-                        className="flex justify-between items-baseline text-[12px] text-[#333333] pl-3.5"
+                        className="flex justify-between items-baseline text-[11px] text-[#5C3A28] pl-3.5"
                       >
-                        <span>{add}</span>
+                        <span>+ {add}</span>
                         <span className="tabular-nums">₱20.00</span>
                       </div>
                     ))}
-
-                  {/* Modifiers: Sweetness & Ice */}
-                  {(it.sweetness || it.ice) && (
-                    <div className="text-[11.5px] text-[#555555] pl-3.5 italic">
-                      {[it.sweetness, it.ice].filter(Boolean).join(' · ')}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
 
-            {/* 6. SUBTOTAL & TAX */}
-            <div className="pt-3 space-y-1 text-[13px]">
-              <div className="flex justify-between items-baseline text-[#111111]">
+            {/* DASHED DIVIDER */}
+            <div className="border-b border-dashed border-[#2A1810]/40 my-1.5" />
+
+            {/* 6. FINANCIAL TOTALS & TAX BREAKDOWN */}
+            <div className="space-y-1 text-[12px] text-[#2A1810]">
+              <div className="flex justify-between items-baseline">
                 <span className="font-medium">SUBTOTAL</span>
                 <span className="tabular-nums font-medium">₱{order.subtotal.toFixed(2)}</span>
               </div>
 
               {order.discountAmount > 0 && (
-                <div className="flex justify-between items-baseline text-[#333333]">
+                <div className="flex justify-between items-baseline text-[#7A3E26] font-medium">
                   <span>DISCOUNT ({order.discountType})</span>
                   <span className="tabular-nums">-₱{order.discountAmount.toFixed(2)}</span>
                 </div>
               )}
 
-              <div className="flex justify-between items-baseline text-[#111111]">
-                <span className="font-medium">TAX (12%)</span>
-                <span className="tabular-nums font-medium">₱{vat12.toFixed(2)}</span>
+              <div className="flex justify-between items-baseline text-[11px] text-[#5C3A28]">
+                <span>VATABLE SALES (Net)</span>
+                <span className="tabular-nums">₱{vatableSales.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between items-baseline text-[11px] text-[#5C3A28]">
+                <span>VAT (12%)</span>
+                <span className="tabular-nums">₱{vat12.toFixed(2)}</span>
               </div>
             </div>
 
-            {/* SOLID DIVIDER BEFORE TOTAL */}
-            <div className="border-b border-[#222222] my-1.5" />
+            {/* DOUBLE SOLID DIVIDER BEFORE GRAND TOTAL */}
+            <div className="border-t-2 border-b border-[#2A1810] my-2 py-0.5" />
 
-            {/* 7. TOTAL DUE (Bold & prominent) */}
-            <div className="flex justify-between items-baseline text-[15px] font-bold text-[#000000]">
-              <span className="tracking-wide">TOTAL</span>
-              <span className="tabular-nums font-extrabold text-[15.5px]">
+            {/* 7. GRAND TOTAL DUE */}
+            <div className="flex justify-between items-baseline text-[16px] font-extrabold text-[#2A1810]">
+              <span className="tracking-wide">TOTAL AMOUNT</span>
+              <span className="tabular-nums text-[17px]">
                 ₱{order.totalAmount.toFixed(2)}
               </span>
             </div>
 
-            {/* DASHED DIVIDER */}
-            <div className="border-b border-dashed border-[#888888] my-1.5" />
+            {/* DOUBLE SOLID DIVIDER AFTER GRAND TOTAL */}
+            <div className="border-t border-b-2 border-[#2A1810] my-2 py-0.5" />
 
-            {/* 8. DATE & TIME */}
-            <div className="text-[12.5px] font-medium text-[#111111] flex justify-between tracking-tight">
-              <span>DATE: {dateFormatted}</span>
-              <span>TIME: {timeFormatted}</span>
-            </div>
-
-            {/* DASHED DIVIDER */}
-            <div className="border-b border-dashed border-[#888888] my-2" />
-
-            {/* 9. TWO AUTHENTIC STACKED BARCODES */}
-            <div className="py-1 space-y-2 flex flex-col items-center">
-              <ThermalBarcode seed={1} height={36} />
-              <ThermalBarcode seed={2} height={36} />
-            </div>
-
-            {/* DASHED DIVIDER */}
-            <div className="border-b border-dashed border-[#888888] my-2" />
-
-            {/* 10. FOOTER: Thank you for visiting Kenny Brew */}
-            <div className="text-center pt-1 pb-1">
-              <div className="text-[13px] font-medium text-[#111111] tracking-tight">
-                Thank you for visiting Kenny Brew
+            {/* 8. PAYMENT & TENDER INFORMATION */}
+            <div className="space-y-1 text-[11.5px] text-[#2A1810]">
+              <div className="flex justify-between items-baseline">
+                <span className="font-semibold">PAYMENT METHOD:</span>
+                <span className="font-bold uppercase">{order.paymentMethod || 'Cash'}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span>AMOUNT TENDERED:</span>
+                <span className="tabular-nums font-semibold">
+                  ₱{(order.amountPaid || order.totalAmount).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-baseline font-bold text-[12px]">
+                <span>CHANGE DUE:</span>
+                <span className="tabular-nums">
+                  ₱{(order.changeAmount || 0).toFixed(2)}
+                </span>
               </div>
             </div>
 
-            {/* SOLID BOTTOM CUT LINE */}
-            <div className="border-b border-[#333333] pt-1" />
+            {/* DASHED DIVIDER */}
+            <div className="border-b border-dashed border-[#2A1810]/40 my-2" />
+
+            {/* 9. AUTHENTIC THERMAL BARCODES */}
+            <div className="py-1 space-y-1.5 flex flex-col items-center">
+              <ThermalBarcode seed={1} height={34} />
+              <div className="text-[10px] text-[#4A2E20] font-mono tracking-widest text-center">
+                *KB-{order.orderNumber}-{dateFormatted.replace(/\//g, '')}*
+              </div>
+            </div>
+
+            {/* DASHED DIVIDER */}
+            <div className="border-b border-dashed border-[#2A1810]/40 my-2" />
+
+            {/* 10. PROFESSIONAL COFFEE SHOP FOOTER */}
+            <div className="text-center pt-1 pb-1 space-y-1 text-[#2A1810]">
+              <div className="text-[12.5px] font-extrabold tracking-tight">
+                Thank you for visiting Kenny Brew!
+              </div>
+              <div className="text-[11px] font-medium text-[#4A2E20]">
+                Poblacion  5, Mid Cot
+              </div>
+              <div className="text-[10px] text-[#5C3A28] pt-0.5">
+                Free Wi-Fi: <span className="font-bold">KennyBrew_Guest</span> (pass: kenny123)
+              </div>
+              <div className="text-[9px] text-[#6E4933] uppercase tracking-wider pt-1 font-bold">
+                THIS SERVES AS YOUR OFFICIAL SALES INVOICE
+              </div>
+            </div>
+
+            {/* BOTTOM SERRATED CUT LINE */}
+            <div className="border-b border-[#2A1810]/40 pt-1" />
           </div>
         </div>
 
@@ -335,8 +415,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           >
             {copied ? (
               <>
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span className="text-emerald-400 font-bold">Copied</span>
+                <Check className="w-4 h-4 text-[#D4A373]" />
+                <span className="text-[#D4A373] font-bold">Copied</span>
               </>
             ) : (
               <>

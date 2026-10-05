@@ -16,6 +16,7 @@ import {
   insertSupabaseOrder,
   upsertSupabaseUser,
   deleteSupabaseUser,
+  recordSupabaseStockAdjustment,
   saveForecastToSupabase,
   getLatestForecastFromSupabase,
 } from './src/server/supabaseService';
@@ -150,6 +151,16 @@ async function startServer() {
   app.delete('/api/supabase/ingredient/:id', async (req, res) => {
     try {
       const result = await deleteSupabaseIngredient(req.params.id);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 5.5 Inventory Stock Adjustment Log
+  app.post('/api/supabase/inventory', async (req, res) => {
+    try {
+      const result = await recordSupabaseStockAdjustment(req.body);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
