@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Users,
   UserPlus,
@@ -25,38 +26,15 @@ interface UserAccountsViewProps {
 
 export const ROLE_PERMISSIONS: Record<
   UserRole,
-  { title: string; permissions: string[]; badgeColor: string }
+  { title: string; badgeColor: string }
 > = {
   owner: {
-    title: 'Shop Owner & Administrator',
-    permissions: [
-      'Full store management & administration',
-      'Staff accounts & permission assignment',
-      'Sales reports & financial analytics',
-      'AI demand & revenue forecasting',
-      'Product catalog, recipes & pricing',
-    ],
-    badgeColor: 'bg-[#1E3A2F] text-[#D8F3E5] border-[#2E5E4A]',
-  },
-  manager: {
-    title: 'Store Manager',
-    permissions: [
-      'Add & update products and recipes',
-      'Inventory restock & depletion control',
-      'Real-time low stock radar & alerts',
-      'AI demand forecast & staffing',
-      'POS cashier terminal access',
-    ],
-    badgeColor: 'bg-[#1E2D4A] text-[#D5E3FC] border-[#2C436F]',
+    title: 'Shop Owner',
+    badgeColor: 'border border-[#4A2E20] text-[#4A2E20] bg-transparent',
   },
   cashier: {
     title: 'Cashier / Barista',
-    permissions: [
-      'POS register & beverage ordering',
-      'Customizations, sizing & sugar levels',
-      'Payment checkout & receipt printing',
-    ],
-    badgeColor: 'bg-[#4A3B1E] text-[#FDF4D9] border-[#6E562A]',
+    badgeColor: 'border border-[#6E562A] text-[#6E562A] bg-transparent',
   },
 };
 
@@ -72,6 +50,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
   // Form states
@@ -107,7 +86,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
     if (!formUsername.trim() || !formFullName.trim()) return;
 
     if (users.some((u) => u.username.toLowerCase() === formUsername.trim().toLowerCase())) {
-      alert(`Username @${formUsername} is already taken.`);
+      showNotice(`Username @${formUsername} is already taken.`);
       return;
     }
 
@@ -116,13 +95,14 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
       username: formUsername.trim().toLowerCase(),
       fullName: formFullName.trim(),
       role: formRole,
-      roleTitle: ROLE_PERMISSIONS[formRole]?.title || 'Staff',
+      roleTitle: ROLE_PERMISSIONS[formRole]?.title || (formRole === 'owner' ? 'Shop Owner' : 'Cashier / Barista'),
       status: formStatus,
       lastLogin: 'Never',
       createdAt: new Date().toISOString().split('T')[0],
+      password: formPassword.trim() || 'kenny123',
     };
 
-    onAddUser(newUser, formPassword);
+    onAddUser(newUser, formPassword.trim() || 'kenny123');
     setIsAddModalOpen(false);
     showNotice(`Added staff account @${newUser.username} (${newUser.fullName})`);
   };
@@ -181,53 +161,6 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
         </div>
       )}
 
-      {/* Role Breakdown Reference Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {(
-          Object.entries(ROLE_PERMISSIONS) as [
-            UserRole,
-            { title: string; permissions: string[]; badgeColor: string }
-          ][]
-        ).map(([roleKey, roleMeta]) => {
-          const count = users.filter((u) => u.role === roleKey).length;
-          return (
-            <div
-              key={roleKey}
-              className="bg-white p-3.5 rounded-xl border border-[#E8DFC8] shadow-xs flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${roleMeta.badgeColor}`}
-                  >
-                    {roleMeta.title}
-                  </span>
-                  <span className="text-xs font-bold text-[#2A1810] tabular-nums">
-                    {count} {count === 1 ? 'user' : 'users'}
-                  </span>
-                </div>
-                <div className="mt-2.5">
-                  <span className="text-[10px] font-semibold text-[#8C7355] uppercase tracking-wider block">
-                    Access Privileges:
-                  </span>
-                  <ul className="mt-1 space-y-1">
-                    {roleMeta.permissions.map((perm) => (
-                      <li
-                        key={perm}
-                        className="text-[11px] text-[#3D291C] flex items-center gap-1.5 font-medium leading-tight"
-                      >
-                        <CheckCircle className="w-3 h-3 text-[#2E7D32] shrink-0" />
-                        <span>{perm}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-xl border border-[#E8DFC8] shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-80">
@@ -249,8 +182,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
             className="px-3 py-2 text-xs bg-[#FAF7F2] border border-[#E8DFC8] rounded-lg text-[#2A1810] focus:outline-none focus:border-[#8A4A28] cursor-pointer"
           >
             <option value="all">All Roles ({users.length})</option>
-            <option value="owner">Shop Owner & Admin</option>
-            <option value="manager">Store Manager</option>
+            <option value="owner">Shop Owner</option>
             <option value="cashier">Cashier / Barista</option>
           </select>
         </div>
@@ -264,7 +196,6 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
               <tr>
                 <th className="py-3 px-4">User</th>
                 <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Permissions</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Last Activity</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -273,7 +204,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
             <tbody className="divide-y divide-[#EFEAE2]">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-xs text-[#8C7355]">
+                  <td colSpan={5} className="py-8 text-center text-xs text-[#8C7355]">
                     No accounts found matching your search.
                   </td>
                 </tr>
@@ -304,23 +235,10 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
 
                       <td className="py-3.5 px-4">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-block ${roleMeta.badgeColor}`}
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded border inline-block ${roleMeta.badgeColor}`}
                         >
                           {roleMeta.title}
                         </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 max-w-xs">
-                        <div className="flex flex-wrap gap-1">
-                          {roleMeta.permissions.slice(0, 2).map((perm) => (
-                            <span
-                              key={perm}
-                              className="px-1.5 py-0.5 rounded text-[10px] bg-[#F2ECE4] text-[#5C4533] border border-[#DFD5C8]"
-                            >
-                              {perm}
-                            </span>
-                          ))}
-                        </div>
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -347,7 +265,11 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => onResetPassword(u.username)}
+                            type="button"
+                            onClick={() => {
+                              onResetPassword(u.username);
+                              showNotice(`Password for @${u.username} reset to default: kenny123`);
+                            }}
                             className="p-1.5 hover:bg-[#EFEAE2] text-[#8C7355] hover:text-[#2A1810] rounded transition-colors cursor-pointer"
                             title="Reset password to shared default (kenny123)"
                           >
@@ -362,12 +284,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                           </button>
                           {!isCurrent && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to remove account "${u.username}"?`)) {
-                                  onDeleteUser(u.username);
-                                  showNotice(`Account "${u.username}" removed`);
-                                }
-                              }}
+                              type="button"
+                              onClick={() => setUserToDelete(u)}
                               className="p-1.5 hover:bg-[#FEE2E2] text-[#8C7355] hover:text-[#DC2626] rounded transition-colors cursor-pointer"
                               title="Delete account"
                             >
@@ -386,15 +304,16 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
       </div>
 
       {/* Add New User Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-[#E8DFC8] w-full max-w-md p-6 space-y-4 animate-in zoom-in-95 duration-150">
+      {isAddModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-[#E8DFC8] w-full max-w-md p-6 space-y-4 my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#EFEAE2]">
               <div>
                 <h3 className="font-bold text-base text-[#2A1810]">Add New Staff Account</h3>
                 <p className="text-xs text-[#7A6452]">Set employee login credentials and role permissions</p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-[#8C7355] hover:text-[#2A1810] p-1 cursor-pointer"
               >
@@ -434,9 +353,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   onChange={(e) => setFormRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8DFC8] rounded-lg text-sm text-[#2A1810] focus:outline-none focus:border-[#8A4A28] cursor-pointer"
                 >
-                  <option value="cashier">Cashier / Barista (POS Register & Checkout)</option>
-                  <option value="manager">Store Manager (Products, Inventory, Stock Alerts & Reports)</option>
-                  <option value="owner">Shop Owner & Administrator (Full Store Oversight & Accounts)</option>
+                  <option value="cashier">Cashier / Barista</option>
+                  <option value="owner">Shop Owner</option>
                 </select>
               </div>
 
@@ -481,13 +399,14 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit User Modal */}
-      {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-[#E8DFC8] w-full max-w-md p-6 space-y-4 animate-in zoom-in-95 duration-150">
+      {editingUser && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-[#E8DFC8] w-full max-w-md p-6 space-y-4 my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#EFEAE2]">
               <div>
                 <h3 className="font-bold text-base text-[#2A1810]">
@@ -496,6 +415,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                 <p className="text-xs text-[#7A6452]">Update staff details and access privileges</p>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingUser(null)}
                 className="text-[#8C7355] hover:text-[#2A1810] p-1 cursor-pointer"
               >
@@ -522,9 +442,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   onChange={(e) => setFormRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8DFC8] rounded-lg text-sm text-[#2A1810] focus:outline-none focus:border-[#8A4A28] cursor-pointer"
                 >
-                  <option value="cashier">Cashier / Barista (POS Register & Checkout)</option>
-                  <option value="manager">Store Manager (Products, Inventory, Stock Alerts & Reports)</option>
-                  <option value="owner">Shop Owner & Administrator (Full Store Oversight & Accounts)</option>
+                  <option value="cashier">Cashier / Barista</option>
+                  <option value="owner">Shop Owner</option>
                 </select>
               </div>
 
@@ -557,7 +476,53 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete Staff Account Confirmation Modal */}
+      {userToDelete && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full border border-[#E8DFC8] shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[#2A1810]">
+                  Delete Staff Account
+                </h3>
+                <p className="text-xs text-[#7A6452]">This will revoke access and remove the account.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#3D291C] bg-[#FAF7F2] p-3 rounded-lg border border-[#E8DFC8]">
+              Are you sure you want to remove account <strong className="text-[#2A1810]">"{userToDelete.fullName} (@{userToDelete.username})"</strong>?
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E8DFC8]">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 border border-[#E8DFC8] rounded-lg text-xs font-semibold text-[#5C4533] hover:bg-[#F8F4EE] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteUser(userToDelete.username);
+                  showNotice(`Account "${userToDelete.username}" removed`);
+                  setUserToDelete(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'manager' | 'cashier';
+export type UserRole = 'owner' | 'cashier';
 
 export interface User {
   id?: string;
@@ -9,6 +9,7 @@ export interface User {
   status?: 'Active' | 'Inactive';
   lastLogin?: string;
   createdAt?: string;
+  password?: string;
 }
 
 export interface Category {

@@ -219,7 +219,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: 'Okinawa Milk Tea with Boba',
     description: 'Roasted brown sugar infused Ceylon black tea with tender, slow-cooked tapioca pearls.',
     price: 135.00,
-    image: '/src/assets/images/product_matcha_tea_1790252121876.jpg',
+    image: '/product-boba-tea.jpg',
     isAvailable: true,
     salesWeight: 0.24,
     recipe: [

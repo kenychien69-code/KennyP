@@ -6,9 +6,10 @@ const LOCAL_ASSETS = {
   matcha: '/src/assets/images/product_matcha_tea_1790252121876.jpg',
   fruitTea: '/src/assets/images/product_fruit_tea_1790252133464.jpg',
   cafe: '/src/assets/images/login_hero_cafe_1790252144418.jpg',
+  boba: '/product-boba-tea.jpg',
 };
 
-// High-fidelity Unsplash coffee & beverage photography
+// High-fidelity coffee & beverage photography
 const PRODUCT_IMAGE_MAP: Record<string, string> = {
   // Spanish Latte
   'spanish latte': LOCAL_ASSETS.latte,
@@ -36,13 +37,12 @@ const PRODUCT_IMAGE_MAP: Record<string, string> = {
   'cold brew':
     'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80',
 
-  // Brown Sugar Boba Milk Tea
-  'brown sugar boba milk tea':
-    'https://images.unsplash.com/photo-1558857563-b37cf5a9c086?auto=format&fit=crop&w=600&q=80',
-  'boba milk tea':
-    'https://images.unsplash.com/photo-1558857563-b37cf5a9c086?auto=format&fit=crop&w=600&q=80',
-  'okinawa milk tea with boba':
-    'https://images.unsplash.com/photo-1558857563-b37cf5a9c086?auto=format&fit=crop&w=600&q=80',
+  // Brown Sugar Boba Milk Tea & Okinawa Milk Tea
+  'brown sugar boba milk tea': LOCAL_ASSETS.boba,
+  'boba milk tea': LOCAL_ASSETS.boba,
+  'okinawa milk tea with boba': LOCAL_ASSETS.boba,
+  'okinawa milk tea': LOCAL_ASSETS.boba,
+  'milk tea': LOCAL_ASSETS.boba,
 
   // Matcha Latte
   'matcha green tea latte': LOCAL_ASSETS.matcha,
@@ -81,10 +81,8 @@ const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
   'cat-espresso':
     'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
   'cat-2': LOCAL_ASSETS.latte, // Iced Coffee
-  'cat-3':
-    'https://images.unsplash.com/photo-1558857563-b37cf5a9c086?auto=format&fit=crop&w=600&q=80', // Milk Tea
-  'cat-tea':
-    'https://images.unsplash.com/photo-1558857563-b37cf5a9c086?auto=format&fit=crop&w=600&q=80',
+  'cat-3': LOCAL_ASSETS.boba, // Milk Tea
+  'cat-tea': LOCAL_ASSETS.boba,
   'cat-fruit': LOCAL_ASSETS.fruitTea,
   'cat-4':
     'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=600&q=80', // Pastry
@@ -102,8 +100,13 @@ export function getProductImageUrl(
   categoryId?: string,
   currentImage?: string
 ): string {
-  // If current image is a valid non-empty string and not a broken path
-  if (currentImage && currentImage.trim().length > 5 && !currentImage.includes('[object')) {
+  // If current image is a valid non-empty string, not broken Unsplash URL, and not placeholder
+  if (
+    currentImage &&
+    currentImage.trim().length > 5 &&
+    !currentImage.includes('photo-1558857563-b37cf5a9c086') &&
+    !currentImage.includes('[object')
+  ) {
     return currentImage.trim();
   }
 

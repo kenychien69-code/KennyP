@@ -64,12 +64,9 @@ export const POSView: React.FC<POSViewProps> = ({
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [completedOrderForReceipt, setCompletedOrderForReceipt] = useState<Order | null>(null);
 
-  // Specific Cashier on duty (defaults to logged-in user full name or Alexander Rivera)
+  // Specific Cashier on duty (defaults to logged-in user full name)
   const [cashierOnDuty, setCashierOnDuty] = useState<string>(() => {
-    if (currentUser.fullName && currentUser.fullName !== 'Cashier Staff') {
-      return currentUser.fullName;
-    }
-    return 'Alexander Rivera';
+    return currentUser.fullName || 'Cashier';
   });
   const [isEditingCashierOnDuty, setIsEditingCashierOnDuty] = useState(false);
 
@@ -169,7 +166,7 @@ export const POSView: React.FC<POSViewProps> = ({
     const newOrder: Order = {
       id: `ORD-${Date.now().toString().slice(-6)}`,
       orderNumber: Math.floor(100 + Math.random() * 900),
-      cashierName: cashierOnDuty.trim() || currentUser.fullName || 'Alexander Rivera',
+      cashierName: cashierOnDuty.trim() || currentUser.fullName || 'Cashier',
       customerName: customerName.trim() || 'Walk-in Customer',
       orderType,
       items: [...cart],
@@ -265,8 +262,12 @@ export const POSView: React.FC<POSViewProps> = ({
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-1"
                     onError={(e) => {
-                      // Gracefully hide broken image element so warm underlay shows
-                      (e.target as HTMLElement).style.opacity = '0';
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('product-boba-tea.jpg') && prod.name.toLowerCase().includes('tea')) {
+                        target.src = '/product-boba-tea.jpg';
+                      } else {
+                        target.style.opacity = '0';
+                      }
                     }}
                   />
                   <div className="absolute top-2 right-2 z-2 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded text-[11px] font-mono font-bold text-[#2A1810] shadow-xs">
@@ -477,7 +478,12 @@ export const POSView: React.FC<POSViewProps> = ({
                     alt={customizingProduct.name}
                     className="w-full h-full object-cover relative z-1"
                     onError={(e) => {
-                      (e.target as HTMLElement).style.opacity = '0';
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('product-boba-tea.jpg') && customizingProduct.name.toLowerCase().includes('tea')) {
+                        target.src = '/product-boba-tea.jpg';
+                      } else {
+                        (e.target as HTMLElement).style.opacity = '0';
+                      }
                     }}
                   />
                 </div>

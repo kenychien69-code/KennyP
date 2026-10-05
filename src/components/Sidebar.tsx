@@ -83,23 +83,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   };
 
-  // Real-world role permissions:
-  // - Cashier: Focused on customer register / POS transactions
-  // - Store Manager: Complete operational control (Products, inventory recipes, stock alerts, reports, forecast, POS)
+  // Role permissions:
+  // - Cashier / Barista: Focused on customer register / POS transactions
   // - Shop Owner: Executive store control across all modules (Admin + Owner)
   let roleTabKeys: NavTab[] = [];
   if (currentUser.role === 'cashier') {
     roleTabKeys = ['pos'];
-  } else if (currentUser.role === 'manager') {
-    roleTabKeys = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast'];
   } else {
     // Shop Owner has full access to all areas including Staff Management
     roleTabKeys = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast', 'users'];
   }
 
   const roleTitleMap: Record<UserRole, string> = {
-    owner: 'Shop Owner & Admin',
-    manager: 'Store Manager',
+    owner: 'Shop Owner',
     cashier: 'Cashier / Barista',
   };
 

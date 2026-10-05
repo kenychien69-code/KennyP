@@ -7,7 +7,6 @@ import {
   Award,
   Sparkles,
   ArrowUpRight,
-  Clock,
   CheckCircle2,
   Package,
 } from 'lucide-react';
@@ -106,10 +105,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-2xl font-extrabold text-[#2A1810] font-mono tabular-nums mt-1.5">
             ₱{totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[11px] text-[#4E7D59] font-medium mt-1 flex items-center gap-1">
-            <ArrowUpRight className="w-3 h-3" />
-            <span>Live POS gross revenue</span>
-          </div>
         </div>
 
         {/* Card 2: Transactions */}
@@ -120,10 +115,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="text-2xl font-extrabold text-[#2A1810] font-mono tabular-nums mt-1.5">
             {transactionsCount}
-          </div>
-          <div className="text-[11px] text-[#7A6452] mt-1 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>{transactionsCount === 1 ? '1 order logged' : `${transactionsCount} orders logged`}</span>
           </div>
         </div>
 
@@ -139,9 +130,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className={`text-2xl font-extrabold font-mono tabular-nums mt-1.5 ${lowStockCount > 0 ? 'text-[#B91C1C]' : 'text-[#2A1810]'}`}>
             {lowStockCount}
           </div>
-          <div className={`text-[11px] font-medium mt-1 ${lowStockCount > 0 ? 'text-[#B91C1C]' : 'text-[#4E7D59]'}`}>
-            {lowStockCount > 0 ? `${lowStockItems[0]?.name} below reorder level` : 'All raw materials healthy'}
-          </div>
         </div>
 
         {/* Card 4: Top Product */}
@@ -152,9 +140,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="text-2xl font-bold text-[#2A1810] truncate mt-1.5">
             {topProductName}
-          </div>
-          <div className="text-[11px] text-[#8A4A28] font-medium mt-1">
-            {sortedProducts.length > 0 ? `${sortedProducts[0][1]} units sold` : 'Awaiting customer orders'}
           </div>
         </div>
       </div>
@@ -169,9 +154,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <h3 className="text-base font-bold text-[#2A1810]">
                   Recent Sales Trend
                 </h3>
-                <p className="text-xs text-[#7A6452]">
-                  Daily gross revenue recorded in Philippine Peso (₱)
-                </p>
               </div>
               <span className="text-xs font-mono font-semibold text-[#8A4A28] bg-[#F7EFE8] px-2.5 py-1 rounded">
                 {historicalSales.length > 0 ? `${historicalSales.length}-Day History` : 'Live POS'}

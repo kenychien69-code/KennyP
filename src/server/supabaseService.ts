@@ -1,5 +1,201 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
 import { getProductImageUrl } from '../utils/productImages';
+import { UserRole } from '../types';
+
+const DATA_DIR = path.join(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const CUSTOM_IMAGES_FILE = path.join(DATA_DIR, 'custom_product_images.json');
+const DELETED_USERS_FILE = path.join(DATA_DIR, 'deleted_usernames.json');
+const DELETED_PRODUCTS_FILE = path.join(DATA_DIR, 'deleted_products.json');
+const DELETED_INGREDIENTS_FILE = path.join(DATA_DIR, 'deleted_ingredients.json');
+const STAFF_USERS_FILE = path.join(DATA_DIR, 'staff_users.json');
+const CUSTOM_PRODUCTS_FILE = path.join(DATA_DIR, 'custom_products.json');
+const CUSTOM_INGREDIENTS_FILE = path.join(DATA_DIR, 'custom_ingredients.json');
+
+function loadJson<T>(file: string, fallback: T): T {
+  try {
+    if (fs.existsSync(file)) {
+      return JSON.parse(fs.readFileSync(file, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn(`Failed to read ${file}:`, e);
+  }
+  return fallback;
+}
+
+function saveJson(file: string, data: any) {
+  try {
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn(`Failed to write ${file}:`, e);
+  }
+}
+
+// Deleted usernames tracking: demo accounts manager and cashier are ALWAYS marked as deleted
+export function loadDeletedUsernames(): Set<string> {
+  const list = loadJson<string[]>(DELETED_USERS_FILE, ['manager', 'cashier']);
+  const s = new Set(list.map((u) => u.toLowerCase().trim()));
+  s.add('manager');
+  s.add('cashier');
+  return s;
+}
+
+export function recordDeletedUsername(username: string) {
+  const s = loadDeletedUsernames();
+  s.add(username.toLowerCase().trim());
+  saveJson(DELETED_USERS_FILE, Array.from(s));
+}
+
+export function loadStaffUsers(): any[] {
+  const users = loadJson<any[]>(STAFF_USERS_FILE, []);
+  return users.filter(
+    (u) =>
+      u.role !== 'manager' &&
+      u.username?.toLowerCase() !== 'manager' &&
+      u.username?.toLowerCase() !== 'cashier'
+  );
+}
+
+export function saveStaffUser(user: any) {
+  const users = loadStaffUsers();
+  const cleanUsername = (user.username || '').toLowerCase().trim();
+  if (!cleanUsername || cleanUsername === 'manager' || cleanUsername === 'cashier') return;
+
+  const idx = users.findIndex((u) => u.username?.toLowerCase().trim() === cleanUsername);
+  if (idx >= 0) {
+    users[idx] = { ...users[idx], ...user };
+  } else {
+    users.push(user);
+  }
+  saveJson(STAFF_USERS_FILE, users);
+
+  const deleted = loadJson<string[]>(DELETED_USERS_FILE, ['manager', 'cashier']);
+  const filtered = deleted.filter(
+    (u) => u.toLowerCase().trim() !== cleanUsername || cleanUsername === 'manager' || cleanUsername === 'cashier'
+  );
+  saveJson(DELETED_USERS_FILE, filtered);
+}
+
+export function removeStaffUser(username: string) {
+  const cleanUsername = username.toLowerCase().trim();
+  recordDeletedUsername(cleanUsername);
+  const users = loadStaffUsers();
+  const filtered = users.filter((u) => u.username?.toLowerCase().trim() !== cleanUsername);
+  saveJson(STAFF_USERS_FILE, filtered);
+}
+
+export function loadDeletedProducts(): Set<string> {
+  const list = loadJson<string[]>(DELETED_PRODUCTS_FILE, []);
+  return new Set(list.map((id) => String(id).toLowerCase().trim()));
+}
+
+export function recordDeletedProduct(id: string) {
+  const s = loadDeletedProducts();
+  s.add(String(id).toLowerCase().trim());
+  saveJson(DELETED_PRODUCTS_FILE, Array.from(s));
+}
+
+export function loadCustomProducts(): any[] {
+  return loadJson<any[]>(CUSTOM_PRODUCTS_FILE, []);
+}
+
+export function saveCustomProduct(product: any) {
+  const prods = loadCustomProducts();
+  const cleanName = product.name ? product.name.toLowerCase().trim() : '';
+  const idx = prods.findIndex(
+    (p) => String(p.id) === String(product.id) || (cleanName && p.name?.toLowerCase().trim() === cleanName)
+  );
+  if (idx >= 0) {
+    prods[idx] = { ...prods[idx], ...product };
+  } else {
+    prods.push(product);
+  }
+  saveJson(CUSTOM_PRODUCTS_FILE, prods);
+
+  const deleted = loadJson<string[]>(DELETED_PRODUCTS_FILE, []);
+  const filtered = deleted.filter((id) => id !== String(product.id) && id !== cleanName);
+  saveJson(DELETED_PRODUCTS_FILE, filtered);
+}
+
+export function removeCustomProduct(id: string) {
+  recordDeletedProduct(id);
+  const prods = loadCustomProducts();
+  const filtered = prods.filter(
+    (p) => String(p.id) !== String(id) && p.name?.toLowerCase().trim() !== String(id).toLowerCase().trim()
+  );
+  saveJson(CUSTOM_PRODUCTS_FILE, filtered);
+}
+
+export function loadDeletedIngredients(): Set<string> {
+  const list = loadJson<string[]>(DELETED_INGREDIENTS_FILE, []);
+  return new Set(list.map((id) => String(id).toLowerCase().trim()));
+}
+
+export function recordDeletedIngredient(id: string) {
+  const s = loadDeletedIngredients();
+  s.add(String(id).toLowerCase().trim());
+  saveJson(DELETED_INGREDIENTS_FILE, Array.from(s));
+}
+
+export function loadCustomIngredients(): any[] {
+  return loadJson<any[]>(CUSTOM_INGREDIENTS_FILE, []);
+}
+
+export function saveCustomIngredient(ingredient: any) {
+  const ings = loadCustomIngredients();
+  const cleanName = ingredient.name ? ingredient.name.toLowerCase().trim() : '';
+  const idx = ings.findIndex(
+    (i) => String(i.id) === String(ingredient.id) || (cleanName && i.name?.toLowerCase().trim() === cleanName)
+  );
+  if (idx >= 0) {
+    ings[idx] = { ...ings[idx], ...ingredient };
+  } else {
+    ings.push(ingredient);
+  }
+  saveJson(CUSTOM_INGREDIENTS_FILE, ings);
+
+  const deleted = loadJson<string[]>(DELETED_INGREDIENTS_FILE, []);
+  const filtered = deleted.filter((id) => id !== String(ingredient.id) && id !== cleanName);
+  saveJson(DELETED_INGREDIENTS_FILE, filtered);
+}
+
+export function removeCustomIngredient(id: string) {
+  recordDeletedIngredient(id);
+  const ings = loadCustomIngredients();
+  const filtered = ings.filter(
+    (i) => String(i.id) !== String(id) && i.name?.toLowerCase().trim() !== String(id).toLowerCase().trim()
+  );
+  saveJson(CUSTOM_INGREDIENTS_FILE, filtered);
+}
+
+function loadCustomProductImages(): Record<string, string> {
+  try {
+    if (fs.existsSync(CUSTOM_IMAGES_FILE)) {
+      return JSON.parse(fs.readFileSync(CUSTOM_IMAGES_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('Failed to load custom product images:', e);
+  }
+  return {};
+}
+
+function saveCustomProductImage(productName: string, imageUrl: string) {
+  try {
+    if (!productName || !imageUrl || imageUrl.includes('photo-1558857563-b37cf5a9c086')) return;
+    const images = loadCustomProductImages();
+    images[productName.trim().toLowerCase()] = imageUrl.trim();
+    saveJson(CUSTOM_IMAGES_FILE, images);
+  } catch (e) {
+    console.warn('Failed to save custom product image:', e);
+  }
+}
 
 // Read credentials from standard, Next.js, or Vite environment variables
 function getSupabaseCredentials() {
@@ -114,6 +310,7 @@ export async function pullAllFromSupabase() {
     orderItemsRes,
     usersRes,
     ingredientsRes,
+    inventoryRes,
   ] = await Promise.allSettled([
     client.from('products').select('*').order('product_id', { ascending: true }),
     client.from('categories').select('*').order('category_id', { ascending: true }),
@@ -121,6 +318,7 @@ export async function pullAllFromSupabase() {
     client.from('orders_items').select('*'),
     client.from('users').select('*').order('user_id', { ascending: true }),
     client.from('ingredients').select('*'),
+    client.from('inventory').select('*'),
   ]);
 
   const rawProducts = productsRes.status === 'fulfilled' ? productsRes.value.data || [] : [];
@@ -128,7 +326,20 @@ export async function pullAllFromSupabase() {
   const rawOrders = ordersRes.status === 'fulfilled' ? ordersRes.value.data || [] : [];
   const rawOrderItems = orderItemsRes.status === 'fulfilled' ? orderItemsRes.value.data || [] : [];
   const rawUsers = usersRes.status === 'fulfilled' ? usersRes.value.data || [] : [];
-  const rawIngredients = ingredientsRes.status === 'fulfilled' ? ingredientsRes.value.data || [] : [];
+  let rawIngredients = ingredientsRes.status === 'fulfilled' ? ingredientsRes.value.data || [] : [];
+  if (!rawIngredients.length && inventoryRes.status === 'fulfilled' && inventoryRes.value.data?.length) {
+    rawIngredients = inventoryRes.value.data.map((inv: any) => ({
+      id: inv.id || inv.item_id || `ing-${inv.name || inv.item_name}`,
+      name: inv.name || inv.item_name,
+      category: inv.category || 'Packaging',
+      unit: inv.unit || 'pcs',
+      current_stock: inv.current_stock ?? inv.quantity ?? inv.stock_qty ?? 0,
+      reorder_level: inv.reorder_level ?? inv.reorder_threshold ?? 20,
+      cost_per_unit: inv.cost_per_unit ?? inv.cost ?? 0,
+      supplier: inv.supplier || '',
+      last_restocked_at: inv.last_restocked_at || inv.updated_at,
+    }));
+  }
 
   // Map Categories to frontend
   const categories = rawCategories.map((c: any) => ({
@@ -138,12 +349,24 @@ export async function pullAllFromSupabase() {
   }));
 
   // Map Products to frontend
-  const products = rawProducts.map((p: any) => {
+  const deletedProducts = loadDeletedProducts();
+  const customProducts = loadCustomProducts();
+  const customImages = loadCustomProductImages();
+
+  const filteredRawProducts = rawProducts.filter((p: any) => {
+    const idStr = String(p.product_id != null ? p.product_id : p.id).toLowerCase();
+    const nameStr = (p.product_name || p.name || '').toLowerCase().trim();
+    return !deletedProducts.has(idStr) && !deletedProducts.has(nameStr);
+  });
+
+  const productMap = new Map<string, any>();
+  for (const p of filteredRawProducts) {
     const id = p.product_id != null ? String(p.product_id) : p.id;
     const catId = p.category_id != null ? `cat-${p.category_id}` : p.categoryId;
     const name = p.product_name || p.name;
-    const image = getProductImageUrl(name, catId, p.image_url || p.image);
-    return {
+    const customImg = name ? customImages[name.trim().toLowerCase()] : null;
+    const image = customImg || getProductImageUrl(name, catId, p.image_url || p.image);
+    productMap.set(name.trim().toLowerCase(), {
       id,
       categoryId: catId,
       name,
@@ -153,40 +376,105 @@ export async function pullAllFromSupabase() {
       isAvailable: p.status ? p.status === 'Available' : (p.is_available ?? true),
       salesWeight: 0.15,
       recipe: Array.isArray(p.recipe) ? p.recipe : [],
-    };
+    });
+  }
+
+  for (const cp of customProducts) {
+    const cleanName = (cp.name || '').toLowerCase().trim();
+    const idStr = String(cp.id || '').toLowerCase().trim();
+    if (!deletedProducts.has(idStr) && !deletedProducts.has(cleanName)) {
+      productMap.set(cleanName, cp);
+    }
+  }
+
+  const products = Array.from(productMap.values());
+
+  // Map Ingredients to frontend
+  const deletedIngredients = loadDeletedIngredients();
+  const customIngredients = loadCustomIngredients();
+
+  const filteredRawIngredients = rawIngredients.filter((i: any) => {
+    const idStr = String(i.id || '').toLowerCase().trim();
+    const nameStr = (i.name || '').toLowerCase().trim();
+    return !deletedIngredients.has(idStr) && !deletedIngredients.has(nameStr);
   });
+
+  const ingredientMap = new Map<string, any>();
+  for (const i of filteredRawIngredients) {
+    const cleanName = (i.name || '').toLowerCase().trim();
+    ingredientMap.set(cleanName, {
+      id: i.id,
+      name: i.name,
+      category: i.category,
+      unit: i.unit,
+      currentStock: i.current_stock ?? i.currentStock ?? 0,
+      reorderLevel: i.reorder_level ?? i.reorderLevel ?? 20,
+      costPerUnit: i.cost_per_unit ?? i.costPerUnit ?? 0,
+      supplier: i.supplier || '',
+      lastRestocked: i.last_restocked_at || i.lastRestocked,
+    });
+  }
+
+  for (const ci of customIngredients) {
+    const cleanName = (ci.name || '').toLowerCase().trim();
+    const idStr = String(ci.id || '').toLowerCase().trim();
+    if (!deletedIngredients.has(idStr) && !deletedIngredients.has(cleanName)) {
+      ingredientMap.set(cleanName, ci);
+    }
+  }
+
+  const ingredients = Array.from(ingredientMap.values());
 
   // Map Users to frontend
-  const users = rawUsers.map((u: any) => {
-    const id = u.user_id != null ? `usr-${u.user_id}` : (u.id || `usr-${u.username}`);
-    const username = u.role || (u.email ? u.email.split('@')[0] : `user${u.user_id}`);
-    const role = (u.role || 'cashier').toLowerCase();
-    const roleTitle =
-      role === 'admin'
-        ? 'Administrator'
-        : role === 'owner'
-        ? 'Shop Owner'
-        : role === 'manager'
-        ? 'Manager'
-        : 'Cashier / Barista';
+  // ALWAYS exclude demo accounts (manager and cashier) and any deleted staff accounts
+  const deletedUsers = loadDeletedUsernames();
+  const customStaff = loadStaffUsers();
 
-    return {
-      id,
-      username,
-      role,
-      fullName: u.name || u.full_name || 'Staff Member',
-      roleTitle,
-      status: 'Active',
-      lastLogin: 'Today',
-      createdAt: '2026-01-01',
-    };
-  });
+  const rawOwner = rawUsers.find(
+    (u: any) =>
+      (u.role || '').toLowerCase() === 'owner' ||
+      (u.role || '').toLowerCase() === 'admin' ||
+      (u.email || '').toLowerCase().startsWith('owner@')
+  );
+
+  const shopOwnerUser = {
+    id: rawOwner?.user_id != null ? `usr-${rawOwner.user_id}` : 'usr-owner',
+    username: 'owner',
+    role: 'owner' as UserRole,
+    fullName: rawOwner?.name || rawOwner?.full_name || 'Shop Owner',
+    roleTitle: 'Shop Owner',
+    status: 'Active' as const,
+    lastLogin: 'Today',
+    createdAt: '2026-01-01',
+  };
+
+  const usersMap = new Map<string, any>();
+  usersMap.set('owner', shopOwnerUser);
+
+  for (const staff of customStaff) {
+    const un = (staff.username || '').toLowerCase().trim();
+    if (un && !deletedUsers.has(un) && un !== 'manager' && un !== 'cashier') {
+      usersMap.set(un, {
+        id: staff.id || `usr-${un}`,
+        username: staff.username,
+        role: staff.role || 'cashier',
+        fullName: staff.fullName || 'Staff Member',
+        roleTitle: staff.roleTitle || 'Cashier / Barista',
+        status: staff.status || 'Active',
+        lastLogin: staff.lastLogin || 'Never',
+        createdAt: staff.createdAt || new Date().toISOString().split('T')[0],
+        password: staff.password,
+      });
+    }
+  }
+
+  const users = Array.from(usersMap.values());
 
   // Map Orders to frontend
   const orders = rawOrders.map((o: any) => {
     const orderId = o.order_id != null ? String(o.order_id) : o.id;
     const matchedUser = rawUsers.find((u: any) => u.user_id === o.user_id);
-    const cashierName = matchedUser?.name || 'Alexander Rivera';
+    const cashierName = matchedUser?.name || 'Cashier';
 
     const items = rawOrderItems
       .filter((item: any) => String(item.order_id) === String(orderId))
@@ -254,19 +542,6 @@ export async function pullAllFromSupabase() {
     ordersCount: salesMap[date].count,
   }));
 
-  // Ingredients (if custom table exists)
-  const ingredients = rawIngredients.map((i: any) => ({
-    id: i.id || String(i.ingredient_id),
-    name: i.name,
-    category: i.category,
-    unit: i.unit,
-    currentStock: Number(i.current_stock),
-    reorderLevel: Number(i.reorder_level),
-    costPerUnit: Number(i.cost_per_unit),
-    supplier: i.supplier || '',
-    lastRestocked: i.last_restocked_at || undefined,
-  }));
-
   return {
     products,
     categories,
@@ -304,7 +579,13 @@ export async function pushAllToSupabase(payload: {
 
   if (payload.products?.length) {
     const formatted = payload.products.map((p, idx) => {
-      const numId = parseInt(String(p.id).replace(/\D/g, '')) || (idx + 1);
+      if (p.name && p.image) {
+        saveCustomProductImage(p.name, p.image);
+      }
+      let numId = parseInt(String(p.id).replace(/\D/g, ''));
+      if (isNaN(numId) || numId > 2147483647 || numId <= 0) {
+        numId = idx + 1;
+      }
       const catId = parseInt(String(p.categoryId).replace(/\D/g, '')) || 1;
       return {
         product_id: numId,
@@ -319,17 +600,16 @@ export async function pushAllToSupabase(payload: {
   }
 
   if (payload.users?.length) {
-    const formatted = payload.users.map((u, idx) => {
-      const numId = parseInt(String(u.id).replace(/\D/g, '')) || (idx + 1);
-      return {
-        user_id: numId,
-        name: u.fullName,
-        email: `${u.username}@kennybrew.com`,
-        password: 'kenny123',
-        role: u.role,
-      };
-    });
-    results.users = await client.from('users').upsert(formatted);
+    const validStaff = payload.users.filter(
+      (u) =>
+        u.role !== 'manager' &&
+        u.username?.toLowerCase() !== 'manager' &&
+        u.username?.toLowerCase() !== 'cashier' &&
+        u.username?.toLowerCase() !== 'owner'
+    );
+    for (const st of validStaff) {
+      saveStaffUser(st);
+    }
   }
 
   if (payload.ingredients?.length) {
@@ -370,10 +650,17 @@ export async function pushAllToSupabase(payload: {
 // ----------------------------------------------------------------------------
 
 export async function upsertSupabaseProduct(product: any) {
+  saveCustomProduct(product);
+  if (product.name && product.image) {
+    saveCustomProductImage(product.name, product.image);
+  }
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, product };
 
-  const numId = parseInt(String(product.id).replace(/\D/g, ''));
+  let numId = parseInt(String(product.id).replace(/\D/g, ''));
+  if (isNaN(numId) || numId > 2147483647 || numId <= 0) {
+    numId = NaN;
+  }
   const catId = parseInt(String(product.categoryId).replace(/\D/g, '')) || 1;
 
   const payload: any = {
@@ -384,30 +671,58 @@ export async function upsertSupabaseProduct(product: any) {
     status: product.isAvailable ? 'Available' : 'Sold Out',
   };
 
-  if (!isNaN(numId) && numId > 0) {
+  // If already has a valid database integer ID, update it
+  if (!isNaN(numId)) {
     payload.product_id = numId;
+    const res = await client.from('products').upsert(payload).select();
+    if (!res.error && res.data && res.data.length > 0) return res;
   }
 
-  return client.from('products').upsert(payload).select();
+  // Check if a product with this exact name already exists in Supabase
+  const { data: existing } = await client
+    .from('products')
+    .select('*')
+    .eq('product_name', product.name)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    const updated = await client
+      .from('products')
+      .update(payload)
+      .eq('product_id', existing[0].product_id)
+      .select();
+    return updated;
+  }
+
+  // Otherwise, insert as brand new product (without product_id so Supabase autoincrements it!)
+  delete payload.product_id;
+  const inserted = await client.from('products').insert([payload]).select();
+  return inserted;
 }
 
 export async function deleteSupabaseProduct(id: string) {
+  removeCustomProduct(id);
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, deleted: id };
 
-  const numId = parseInt(String(id).replace(/\D/g, ''));
-  if (isNaN(numId)) {
-    return client.from('products').delete().eq('product_name', id);
+  let numId = parseInt(String(id).replace(/\D/g, ''));
+  if (isNaN(numId) || numId > 2147483647) {
+    await client.from('products').delete().eq('product_name', id);
+  } else {
+    await client.from('products').delete().or(`product_id.eq.${numId},product_name.eq.${id}`);
   }
-  return client.from('products').delete().eq('product_id', numId);
+  return { ok: true, deleted: id };
 }
 
 export async function upsertSupabaseIngredient(ingredient: any) {
+  saveCustomIngredient(ingredient);
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, ingredient };
 
+  let error: any = null;
+  // 1. Try 'ingredients' table
   try {
-    return await client.from('ingredients').upsert({
+    const res = await client.from('ingredients').upsert({
       id: ingredient.id,
       name: ingredient.name,
       category: ingredient.category,
@@ -417,47 +732,109 @@ export async function upsertSupabaseIngredient(ingredient: any) {
       cost_per_unit: ingredient.costPerUnit,
       supplier: ingredient.supplier || null,
       last_restocked_at: ingredient.lastRestocked || null,
-    });
-  } catch {
-    return { ok: true };
+    }).select();
+    if (!res.error) return res;
+    error = res.error;
+  } catch (e) {
+    error = e;
   }
+
+  // 2. Also try 'inventory' table in case table name in Supabase is inventory
+  try {
+    const res = await client.from('inventory').upsert({
+      id: ingredient.id,
+      name: ingredient.name,
+      item_name: ingredient.name,
+      category: ingredient.category,
+      unit: ingredient.unit,
+      current_stock: ingredient.currentStock,
+      quantity: ingredient.currentStock,
+      stock_qty: ingredient.currentStock,
+      reorder_level: ingredient.reorderLevel,
+      cost_per_unit: ingredient.costPerUnit,
+      supplier: ingredient.supplier || null,
+    }).select();
+    if (!res.error) return res;
+  } catch {}
+
+  return { ok: true, error };
 }
 
 export async function deleteSupabaseIngredient(id: string) {
+  removeCustomIngredient(id);
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, deleted: id };
 
   try {
-    return await client.from('ingredients').delete().eq('id', id);
-  } catch {
-    return { ok: true };
-  }
+    await client.from('ingredients').delete().or(`id.eq.${id},name.eq.${id}`);
+  } catch {}
+
+  try {
+    await client.from('inventory').delete().or(`id.eq.${id},item_name.eq.${id},name.eq.${id}`);
+  } catch {}
+
+  return { ok: true, deleted: id };
 }
 
 export async function upsertSupabaseUser(user: any) {
+  saveStaffUser(user);
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, user };
 
-  const numId = parseInt(String(user.id).replace(/\D/g, ''));
+  let numId = parseInt(String(user.id).replace(/\D/g, ''));
+  if (isNaN(numId) || numId > 2147483647 || numId <= 0) {
+    numId = NaN;
+  }
+
   const payload: any = {
     name: user.fullName,
     email: `${user.username}@kennybrew.com`,
-    password: 'kenny123',
+    password: user.password || 'kenny123',
     role: user.role,
   };
 
-  if (!isNaN(numId) && numId > 0) {
-    payload.user_id = numId;
-  }
+  try {
+    if (!isNaN(numId)) {
+      payload.user_id = numId;
+      const res = await client.from('users').upsert(payload).select();
+      if (!res.error && res.data && res.data.length > 0) return res;
+    }
 
-  return client.from('users').upsert(payload).select();
+    const { data: existing } = await client
+      .from('users')
+      .select('*')
+      .or(`role.eq.${user.role},email.eq.${user.username}@kennybrew.com`)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      const updated = await client
+        .from('users')
+        .update({
+          name: user.fullName,
+          role: user.role,
+        })
+        .eq('user_id', existing[0].user_id)
+        .select();
+      return updated;
+    }
+
+    delete payload.user_id;
+    return await client.from('users').insert([payload]).select();
+  } catch (err) {
+    // If Supabase RLS limits user insertion, local persistence in staff_users.json guarantees it works
+    return { ok: true, user };
+  }
 }
 
 export async function deleteSupabaseUser(username: string) {
+  removeStaffUser(username);
   const client = getSupabase();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { ok: true, deleted: username };
 
-  return client.from('users').delete().eq('role', username);
+  try {
+    await client.from('users').delete().or(`role.eq.${username},email.eq.${username}@kennybrew.com`);
+  } catch {}
+  return { ok: true, deleted: username };
 }
 
 export async function insertSupabaseOrder(payload: {

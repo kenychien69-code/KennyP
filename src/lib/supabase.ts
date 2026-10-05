@@ -7,8 +7,10 @@ const STORAGE_KEY_URL = 'kenny_brew_supabase_url';
 const STORAGE_KEY_ANON = 'kenny_brew_supabase_anon';
 
 export function getStoredSupabaseConfig(): { url: string; anonKey: string } {
-  const url = localStorage.getItem(STORAGE_KEY_URL) || '';
-  const anonKey = localStorage.getItem(STORAGE_KEY_ANON) || '';
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  const url = localStorage.getItem(STORAGE_KEY_URL) || envUrl || '';
+  const anonKey = localStorage.getItem(STORAGE_KEY_ANON) || envKey || '';
   return { url, anonKey };
 }
 

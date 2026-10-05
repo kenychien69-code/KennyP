@@ -130,7 +130,7 @@ export class SupabaseSyncService {
   // 4. Products: Automatic Upsert
   async syncProductUpsert(product: Product) {
     try {
-      await fetch('/api/supabase/product', {
+      const res = await fetch('/api/supabase/product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(product),
@@ -138,6 +138,9 @@ export class SupabaseSyncService {
       this.notify({
         lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
+      if (res.ok) {
+        return await res.json();
+      }
     } catch (err) {
       console.warn('Auto-sync product failed:', err);
     }
@@ -210,7 +213,7 @@ export class SupabaseSyncService {
   // 9. Users: Automatic Upsert
   async syncUserUpsert(user: User) {
     try {
-      await fetch('/api/supabase/user', {
+      const res = await fetch('/api/supabase/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(user),
@@ -218,6 +221,9 @@ export class SupabaseSyncService {
       this.notify({
         lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
+      if (res.ok) {
+        return await res.json();
+      }
     } catch (err) {
       console.warn('Auto-sync user failed:', err);
     }

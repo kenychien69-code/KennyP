@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import {
   checkSupabaseStatus,
@@ -59,6 +60,61 @@ async function startServer() {
       res.json({ success: true, result });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to push data to Supabase' });
+    }
+  });
+
+  // Static serving for persistent user uploaded product photos
+  const uploadsDir = path.join(__dirname, 'public', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir));
+
+  // Image Upload API (Permanently stores image to disk as a static asset)
+  app.post('/api/upload-image', (req, res) => {
+    try {
+      const { image, name } = req.body;
+      if (!image) {
+        return res.status(400).json({ error: 'No image data provided' });
+      }
+
+      let buffer: Buffer;
+      let extension = 'jpg';
+
+      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mime = matches[1];
+        if (mime.includes('png')) extension = 'png';
+        else if (mime.includes('webp')) extension = 'webp';
+        else if (mime.includes('gif')) extension = 'gif';
+        buffer = Buffer.from(matches[2], 'base64');
+      } else {
+        buffer = Buffer.from(image, 'base64');
+      }
+
+      const cleanName = (name || 'product')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .slice(0, 20);
+      const filename = `prod_${cleanName}_${Date.now()}.${extension}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, buffer);
+
+      // Also copy to dist/uploads if dist directory exists
+      const distDir = path.join(__dirname, 'dist', 'uploads');
+      if (fs.existsSync(path.join(__dirname, 'dist'))) {
+        if (!fs.existsSync(distDir)) {
+          fs.mkdirSync(distDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(distDir, filename), buffer);
+      }
+
+      const publicUrl = `/uploads/${filename}`;
+      return res.json({ success: true, url: publicUrl });
+    } catch (err: any) {
+      console.error('Image upload error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to upload image' });
     }
   });
 

@@ -31,12 +31,37 @@ import { supabaseSync } from './services/supabaseSyncService';
 import { ReceiptModal } from './components/ReceiptModal';
 import { getProductImageUrl } from './utils/productImages';
 
-const STORAGE_KEY_PRODUCTS = 'kenny_brew_products_v3';
-const STORAGE_KEY_INGREDIENTS = 'kenny_brew_ingredients_v3';
-const STORAGE_KEY_ORDERS = 'kenny_brew_orders_v3';
-const STORAGE_KEY_HISTORICAL = 'kenny_brew_historical_v3';
-const STORAGE_KEY_USER = 'kenny_brew_current_user_v3';
-const STORAGE_KEY_USERS_LIST = 'kenny_brew_users_list_v3';
+const STORAGE_KEY_PRODUCTS = 'kenny_brew_products_v4';
+const STORAGE_KEY_INGREDIENTS = 'kenny_brew_ingredients_v4';
+const STORAGE_KEY_ORDERS = 'kenny_brew_orders_v4';
+const STORAGE_KEY_HISTORICAL = 'kenny_brew_historical_v4';
+const STORAGE_KEY_USER = 'kenny_brew_current_user_v4';
+const STORAGE_KEY_USERS_LIST = 'kenny_brew_users_list_v4';
+const STORAGE_KEY_DELETED_USERS = 'kenny_brew_deleted_users_v4';
+const STORAGE_KEY_DELETED_PRODUCTS = 'kenny_brew_deleted_products_v4';
+const STORAGE_KEY_DELETED_INGREDIENTS = 'kenny_brew_deleted_ingredients_v4';
+
+function getLocalDeleted(key: string, initial: string[] = []): Set<string> {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed: string[] = raw ? JSON.parse(raw) : initial;
+    return new Set(parsed.map((s) => String(s).toLowerCase().trim()));
+  } catch {
+    return new Set(initial.map((s) => String(s).toLowerCase().trim()));
+  }
+}
+
+function addLocalDeleted(key: string, ...items: (string | undefined)[]) {
+  try {
+    const current = getLocalDeleted(key);
+    for (const item of items) {
+      if (item) current.add(String(item).toLowerCase().trim());
+    }
+    localStorage.setItem(key, JSON.stringify(Array.from(current)));
+  } catch (e) {
+    console.warn('Failed to save deleted keys:', e);
+  }
+}
 
 // Initial staff accounts for store roles (Owner acts as Administrator)
 const INITIAL_STAFF_USERS: User[] = [
@@ -44,31 +69,11 @@ const INITIAL_STAFF_USERS: User[] = [
     id: 'usr-owner',
     username: 'owner',
     role: 'owner',
-    fullName: 'Kenny Chien',
-    roleTitle: 'Shop Owner & Administrator',
+    fullName: 'Shop Owner',
+    roleTitle: 'Shop Owner',
     status: 'Active',
-    lastLogin: 'Today, 09:15 AM',
+    lastLogin: 'Today',
     createdAt: '2026-01-01',
-  },
-  {
-    id: 'usr-manager',
-    username: 'manager',
-    role: 'manager',
-    fullName: 'Store Operations Manager',
-    roleTitle: 'Store Manager',
-    status: 'Active',
-    lastLogin: 'Today, 08:00 AM',
-    createdAt: '2026-01-05',
-  },
-  {
-    id: 'usr-cashier',
-    username: 'cashier',
-    role: 'cashier',
-    fullName: 'Alexander Rivera',
-    roleTitle: 'Cashier / Barista',
-    status: 'Active',
-    lastLogin: 'Today, 07:45 AM',
-    createdAt: '2026-01-10',
   },
 ];
 
@@ -78,11 +83,16 @@ export default function App() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USER);
       if (saved) {
-        const parsed: User = JSON.parse(saved);
-        if (parsed.username === 'cashier' && parsed.fullName === 'Cashier Staff') {
-          parsed.fullName = 'Alexander Rivera';
+        const parsed: any = JSON.parse(saved);
+        if (parsed.role === 'manager' || parsed.username === 'manager') {
+          localStorage.removeItem(STORAGE_KEY_USER);
+          return null;
         }
-        return parsed;
+        if (parsed.username === 'cashier' && (parsed.fullName === 'Alexander Rivera' || parsed.fullName === 'Cashier Staff')) {
+          localStorage.removeItem(STORAGE_KEY_USER);
+          return null;
+        }
+        return parsed as User;
       }
       return null;
     } catch {
@@ -126,12 +136,29 @@ export default function App() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USERS_LIST);
       if (saved) {
-        const parsed: User[] = JSON.parse(saved);
-        return parsed.map((u) =>
-          u.username === 'cashier' && u.fullName === 'Cashier Staff'
-            ? { ...u, fullName: 'Alexander Rivera', roleTitle: 'Cashier / Barista' }
-            : u
-        );
+        const parsed: any[] = JSON.parse(saved);
+        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['manager', 'cashier']);
+        // Exclude obsolete 'manager' role and initial demo accounts or deleted users
+        const cleaned: User[] = parsed
+          .filter((u) => {
+            const un = (u.username || '').toLowerCase().trim();
+            if (deletedSet.has(un)) return false;
+            if ((u.role as string) === 'manager' || un === 'manager') return false;
+            if (un === 'cashier' && (u.fullName === 'Alexander Rivera' || u.fullName === 'Cashier Staff')) return false;
+            return true;
+          })
+          .map((u) => ({
+            ...u,
+            role: (u.role === 'owner' ? 'owner' : 'cashier') as UserRole,
+            roleTitle: u.role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
+          }));
+
+        // Ensure Shop Owner is always present
+        const hasOwner = cleaned.some((u) => u.role === 'owner');
+        if (!hasOwner) {
+          cleaned.unshift(INITIAL_STAFF_USERS[0]);
+        }
+        return cleaned;
       }
       return INITIAL_STAFF_USERS;
     } catch {
@@ -167,21 +194,106 @@ export default function App() {
           if (remote.categories && remote.categories.length > 0) {
             setCategories(remote.categories);
           }
+          const deletedUsernames = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['manager', 'cashier']);
+          const deletedProducts = getLocalDeleted(STORAGE_KEY_DELETED_PRODUCTS);
+          const deletedIngredients = getLocalDeleted(STORAGE_KEY_DELETED_INGREDIENTS);
+
           if (remote.products && remote.products.length > 0) {
-            const sanitized = remote.products.map((p) => ({
-              ...p,
-              image: getProductImageUrl(p.name, p.categoryId, p.image),
-            }));
-            setProducts(sanitized);
+            setProducts((prev) => {
+              const activeRemote = remote.products.filter((p) => {
+                const idMatch = deletedProducts.has(String(p.id).toLowerCase().trim());
+                const nameMatch = deletedProducts.has((p.name || '').toLowerCase().trim());
+                return !idMatch && !nameMatch;
+              });
+
+              const remoteSanitized = activeRemote.map((p) => {
+                // Check if this product already has a user-set custom image locally
+                const existingLocal = prev.find(
+                  (lp) =>
+                    String(lp.id) === String(p.id) ||
+                    lp.name.trim().toLowerCase() === p.name.trim().toLowerCase()
+                );
+
+                // If local has a valid custom image (uploaded photo, /uploads/, or custom url), preserve it!
+                const hasCustomLocalImage =
+                  existingLocal?.image &&
+                  !existingLocal.image.includes('photo-1558857563-b37cf5a9c086') &&
+                  (existingLocal.image.startsWith('/uploads/') ||
+                    existingLocal.image.startsWith('data:image/') ||
+                    existingLocal.image.startsWith('/product-'));
+
+                const finalImage = hasCustomLocalImage
+                  ? existingLocal.image
+                  : getProductImageUrl(p.name, p.categoryId, p.image);
+
+                return {
+                  ...p,
+                  image: finalImage,
+                };
+              });
+
+              const remoteNames = new Set(remoteSanitized.map((p) => p.name.toLowerCase()));
+              const unsynced = prev.filter(
+                (p) =>
+                  !remoteNames.has(p.name.toLowerCase()) &&
+                  !deletedProducts.has(String(p.id).toLowerCase()) &&
+                  !deletedProducts.has(p.name.toLowerCase())
+              );
+              unsynced.forEach((p) => supabaseSync.syncProductUpsert(p));
+              return [...remoteSanitized, ...unsynced];
+            });
           }
           if (remote.ingredients && remote.ingredients.length > 0) {
-            setIngredients(remote.ingredients);
+            setIngredients((prev) => {
+              const activeRemote = remote.ingredients.filter((i) => {
+                const idMatch = deletedIngredients.has(String(i.id).toLowerCase().trim());
+                const nameMatch = deletedIngredients.has((i.name || '').toLowerCase().trim());
+                return !idMatch && !nameMatch;
+              });
+
+              const remoteNames = new Set(activeRemote.map((i) => i.name.toLowerCase()));
+              const unsynced = prev.filter(
+                (i) =>
+                  !remoteNames.has(i.name.toLowerCase()) &&
+                  !deletedIngredients.has(String(i.id).toLowerCase()) &&
+                  !deletedIngredients.has(i.name.toLowerCase())
+              );
+              unsynced.forEach((i) => supabaseSync.syncIngredientUpsert(i));
+              return [...activeRemote, ...unsynced];
+            });
           }
           if (remote.orders && remote.orders.length > 0) {
             setOrders(remote.orders);
           }
           if (remote.users && remote.users.length > 0) {
-            setUsersList(remote.users);
+            setUsersList((prev) => {
+              // Exclude demo accounts and deleted users
+              const activeRemote = remote.users.filter((u) => {
+                const un = (u.username || '').toLowerCase().trim();
+                if (deletedUsernames.has(un)) return false;
+                if ((u.role as string) === 'manager' || un === 'manager') return false;
+                if (un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera')) return false;
+                return true;
+              });
+
+              const remoteUsernames = new Set(activeRemote.map((u) => u.username.toLowerCase()));
+              const unsyncedLocal = prev.filter((u) => {
+                const un = (u.username || '').toLowerCase().trim();
+                return (
+                  !remoteUsernames.has(un) &&
+                  !deletedUsernames.has(un) &&
+                  un !== 'manager' &&
+                  !(un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera'))
+                );
+              });
+
+              const combined = [...activeRemote, ...unsyncedLocal];
+              const hasOwner = combined.some((u) => u.role === 'owner');
+              if (!hasOwner) {
+                combined.unshift(INITIAL_STAFF_USERS[0]);
+              }
+              return combined;
+            });
           }
           if (remote.historicalSales && remote.historicalSales.length > 0) {
             setHistoricalSales(remote.historicalSales);
@@ -222,16 +334,10 @@ export default function App() {
 
   // Adjust active tab when role changes to ensure valid view
   const adjustTabForRole = (role: UserRole) => {
-    const managerTabs: NavTab[] = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast'];
     const ownerTabs: NavTab[] = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast', 'users'];
     const cashierTabs: NavTab[] = ['pos'];
 
-    const allowed =
-      role === 'cashier'
-        ? cashierTabs
-        : role === 'manager'
-        ? managerTabs
-        : ownerTabs;
+    const allowed = role === 'cashier' ? cashierTabs : ownerTabs;
 
     if (!allowed.includes(activeTab)) {
       setActiveTab(allowed[0]);
@@ -240,14 +346,6 @@ export default function App() {
 
   // Completely wipe state and reset to clean empty state
   const handleClearAllData = () => {
-    if (
-      !confirm(
-        'Are you sure you want to completely clear all transaction history, sales records, and reset inventory stock? This action cannot be undone.'
-      )
-    ) {
-      return;
-    }
-
     try {
       localStorage.removeItem(STORAGE_KEY_ORDERS);
       localStorage.removeItem(STORAGE_KEY_HISTORICAL);
@@ -259,8 +357,6 @@ export default function App() {
       setProducts(INITIAL_PRODUCTS);
       setIngredients(INITIAL_INGREDIENTS);
       setForecast(generateSalesForecast([], INITIAL_PRODUCTS, INITIAL_INGREDIENTS));
-
-      alert('All sales data has been cleared. System is now completely fresh.');
     } catch (err) {
       console.error('Failed to clear local storage:', err);
     }
@@ -334,6 +430,25 @@ export default function App() {
     });
   };
 
+  // Inventory update + Auto Supabase Sync
+  const handleUpdateIngredient = (id: string, updates: Partial<Ingredient>) => {
+    setIngredients((prev) => {
+      const next = prev.map((item) => {
+        if (String(item.id) === String(id)) {
+          const updated = {
+            ...item,
+            ...updates,
+          };
+          // Automatically save updated ingredient in Supabase
+          supabaseSync.syncIngredientUpsert(updated);
+          return updated;
+        }
+        return item;
+      });
+      return next;
+    });
+  };
+
   // Inventory additions + Auto Supabase Sync
   const handleAddIngredient = (newIngredient: Ingredient) => {
     setIngredients((prev) => [...prev, newIngredient]);
@@ -343,22 +458,30 @@ export default function App() {
 
   // Inventory deletion + Auto Supabase Sync
   const handleDeleteIngredient = (id: string) => {
-    setIngredients((prev) => prev.filter((item) => item.id !== id));
+    const target = ingredients.find((item) => String(item.id) === String(id));
+    addLocalDeleted(STORAGE_KEY_DELETED_INGREDIENTS, id, target?.name);
+    setIngredients((prev) => prev.filter((item) => String(item.id) !== String(id)));
     // Automatically delete ingredient from Supabase
     supabaseSync.syncIngredientDelete(id);
   };
 
   // Product catalog management + Auto Supabase Sync
-  const handleAddProduct = (newProduct: Product) => {
+  const handleAddProduct = async (newProduct: Product) => {
     setProducts((prev) => [...prev, newProduct]);
     // Automatically save new product in Supabase
-    supabaseSync.syncProductUpsert(newProduct);
+    const res = await supabaseSync.syncProductUpsert(newProduct);
+    if (res && res.data && res.data[0]) {
+      const realId = String(res.data[0].product_id);
+      setProducts((prev) =>
+        prev.map((p) => (String(p.id) === String(newProduct.id) ? { ...p, id: realId } : p))
+      );
+    }
   };
 
   const handleUpdateProduct = (productId: string, updates: Partial<Product>) => {
     setProducts((prev) => {
-      const next = prev.map((p) => (p.id === productId ? { ...p, ...updates } : p));
-      const target = next.find((p) => p.id === productId);
+      const next = prev.map((p) => (String(p.id) === String(productId) ? { ...p, ...updates } : p));
+      const target = next.find((p) => String(p.id) === String(productId));
       if (target) {
         // Automatically save updated product in Supabase
         supabaseSync.syncProductUpsert(target);
@@ -370,9 +493,9 @@ export default function App() {
   const handleToggleProductAvailability = (productId: string) => {
     setProducts((prev) => {
       const next = prev.map((p) =>
-        p.id === productId ? { ...p, isAvailable: !p.isAvailable } : p
+        String(p.id) === String(productId) ? { ...p, isAvailable: !p.isAvailable } : p
       );
-      const target = next.find((p) => p.id === productId);
+      const target = next.find((p) => String(p.id) === String(productId));
       if (target) {
         // Automatically save availability state in Supabase
         supabaseSync.syncProductUpsert(target);
@@ -382,7 +505,9 @@ export default function App() {
   };
 
   const handleDeleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    const target = products.find((p) => String(p.id) === String(productId));
+    addLocalDeleted(STORAGE_KEY_DELETED_PRODUCTS, productId, target?.name);
+    setProducts((prev) => prev.filter((p) => String(p.id) !== String(productId)));
     // Automatically delete product from Supabase
     supabaseSync.syncProductDelete(productId);
   };
@@ -415,13 +540,14 @@ export default function App() {
   };
 
   const handleDeleteUser = (username: string) => {
+    addLocalDeleted(STORAGE_KEY_DELETED_USERS, username);
     setUsersList((prev) => prev.filter((u) => u.username.toLowerCase() !== username.toLowerCase()));
     // Automatically delete user from Supabase
     supabaseSync.syncUserDelete(username);
   };
 
-  const handleResetPassword = (username: string) => {
-    alert(`Password for @${username} has been reset to default: ${SHARED_PASSWORD}`);
+  const handleResetPassword = (_username: string) => {
+    // Password reset is handled with in-app notice
   };
 
   // AI Forecasting Trigger
@@ -467,12 +593,8 @@ export default function App() {
         id: `usr-${role}`,
         username: role,
         role: role,
-        fullName:
-          role === 'owner'
-            ? 'Shop Owner & Administrator'
-            : role === 'manager'
-            ? 'Store Operations Manager'
-            : 'Alexander Rivera',
+        fullName: role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
+        roleTitle: role === 'owner' ? 'Shop Owner' : 'Cashier / Barista',
       };
     }
     setCurrentUser(matchedUser);
@@ -500,7 +622,7 @@ export default function App() {
   const lowStockCount = ingredients.filter((i) => i.currentStock <= i.reorderLevel).length;
 
   if (!currentUser) {
-    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+    return <LoginView onLoginSuccess={handleLoginSuccess} usersList={usersList} />;
   }
 
   return (
@@ -565,6 +687,7 @@ export default function App() {
               products={products}
               ingredients={ingredients}
               onRestockIngredient={handleRestockIngredient}
+              onUpdateIngredient={handleUpdateIngredient}
               onAddIngredient={handleAddIngredient}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
