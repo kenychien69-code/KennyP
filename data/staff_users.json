@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "usr-1791196016883",
+    "username": "manager",
+    "fullName": "Dave Flores",
+    "role": "manager",
+    "roleTitle": "Store Manager",
+    "lastLogin": "Never",
+    "createdAt": "2026-10-05",
+    "password": "kenny123"
+  },
+  {
+    "username": "teststaff",
+    "fullName": "Test Staff",
+    "role": "cashier",
+    "password": "testpassword123"
+  }
+]

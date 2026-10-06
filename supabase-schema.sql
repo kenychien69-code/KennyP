@@ -142,6 +142,11 @@ CREATE POLICY "Allow public all on orders_items" ON public.orders_items FOR ALL 
 CREATE POLICY "Allow public all on historical_sales" ON public.historical_sales FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all on sales_forecasts" ON public.sales_forecasts FOR ALL USING (true) WITH CHECK (true);
 
+-- Storage bucket 'images' RLS policies for permanent photo upload & public CDN
+CREATE POLICY "Allow public uploads to images bucket" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'images');
+CREATE POLICY "Allow public updates to images bucket" ON storage.objects FOR UPDATE TO public USING (bucket_id = 'images');
+CREATE POLICY "Allow public reads from images bucket" ON storage.objects FOR SELECT TO public USING (bucket_id = 'images');
+
 -- ==============================================================================
 -- SEED INITIAL DATA (Coffee & Tea Shop)
 -- ==============================================================================

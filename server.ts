@@ -19,6 +19,9 @@ import {
   recordSupabaseStockAdjustment,
   saveForecastToSupabase,
   getLatestForecastFromSupabase,
+  uploadToSupabaseStorage,
+  checkSupabaseStorageStatus,
+  saveCustomProductImage,
 } from './src/server/supabaseService';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,8 +74,8 @@ async function startServer() {
   }
   app.use('/uploads', express.static(uploadsDir));
 
-  // Image Upload API (Permanently stores image to disk as a static asset)
-  app.post('/api/upload-image', (req, res) => {
+  // Image Upload API (Uploads to Supabase Storage bucket 'images' or falls back to local storage)
+  app.post('/api/upload-image', async (req, res) => {
     try {
       const { image, name } = req.body;
       if (!image) {
@@ -81,13 +84,14 @@ async function startServer() {
 
       let buffer: Buffer;
       let extension = 'jpg';
+      let mimeType = 'image/jpeg';
 
       const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches.length === 3) {
-        const mime = matches[1];
-        if (mime.includes('png')) extension = 'png';
-        else if (mime.includes('webp')) extension = 'webp';
-        else if (mime.includes('gif')) extension = 'gif';
+        mimeType = matches[1];
+        if (mimeType.includes('png')) extension = 'png';
+        else if (mimeType.includes('webp')) extension = 'webp';
+        else if (mimeType.includes('gif')) extension = 'gif';
         buffer = Buffer.from(matches[2], 'base64');
       } else {
         buffer = Buffer.from(image, 'base64');
@@ -96,13 +100,28 @@ async function startServer() {
       const cleanName = (name || 'product')
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '_')
-        .slice(0, 20);
+        .slice(0, 24);
       const filename = `prod_${cleanName}_${Date.now()}.${extension}`;
-      const filePath = path.join(uploadsDir, filename);
 
+      // 1. Primary: Upload directly to Supabase Storage 'images' bucket
+      const supabaseResult = await uploadToSupabaseStorage(filename, buffer, mimeType);
+
+      if (supabaseResult.url) {
+        if (name) {
+          saveCustomProductImage(name, supabaseResult.url);
+        }
+        return res.json({
+          success: true,
+          url: supabaseResult.url,
+          storage: 'supabase',
+          message: 'Uploaded permanently to Supabase Storage CDN',
+        });
+      }
+
+      // 2. Fallback: Save to local container uploads if Supabase Storage policy is missing
+      const filePath = path.join(uploadsDir, filename);
       fs.writeFileSync(filePath, buffer);
 
-      // Also copy to dist/uploads if dist directory exists
       const distDir = path.join(__dirname, 'dist', 'uploads');
       if (fs.existsSync(path.join(__dirname, 'dist'))) {
         if (!fs.existsSync(distDir)) {
@@ -112,10 +131,31 @@ async function startServer() {
       }
 
       const publicUrl = `/uploads/${filename}`;
-      return res.json({ success: true, url: publicUrl });
+      if (name) {
+        saveCustomProductImage(name, publicUrl);
+      }
+
+      return res.json({
+        success: true,
+        url: publicUrl,
+        storage: 'local',
+        warning: supabaseResult.error
+          ? `Supabase Storage policy required: ${supabaseResult.error}`
+          : 'Saved locally',
+      });
     } catch (err: any) {
       console.error('Image upload error:', err);
       return res.status(500).json({ error: err.message || 'Failed to upload image' });
+    }
+  });
+
+  // Storage Health & Policy Check API
+  app.get('/api/supabase/storage-status', async (req, res) => {
+    try {
+      const status = await checkSupabaseStorageStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

@@ -63,6 +63,18 @@ function addLocalDeleted(key: string, ...items: (string | undefined)[]) {
   }
 }
 
+function removeLocalDeleted(key: string, ...items: (string | undefined)[]) {
+  try {
+    const current = getLocalDeleted(key);
+    for (const item of items) {
+      if (item) current.delete(String(item).toLowerCase().trim());
+    }
+    localStorage.setItem(key, JSON.stringify(Array.from(current)));
+  } catch (e) {
+    console.warn('Failed to remove deleted keys:', e);
+  }
+}
+
 // Initial staff accounts for store roles (Owner acts as Administrator)
 const INITIAL_STAFF_USERS: User[] = [
   {
@@ -145,18 +157,19 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_USERS_LIST);
       if (saved) {
         const parsed: any[] = JSON.parse(saved);
-        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['cashier']);
+        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS);
         let cleaned: User[] = parsed
           .filter((u) => {
-            const un = (u.username || '').toLowerCase().trim();
+            if (!u) return false;
+            const un = String(u.username || '').toLowerCase().trim();
             if (deletedSet.has(un)) return false;
-            if (un === 'cashier' && (u.fullName === 'Alexander Rivera' || u.fullName === 'Cashier Staff')) return false;
             return true;
           })
           .map((u) => {
             const role: UserRole = u.role === 'owner' ? 'owner' : u.role === 'manager' ? 'manager' : 'cashier';
             return {
               ...u,
+              username: u.username || `user_${u.id || Date.now()}`,
               role,
               roleTitle: role === 'owner' ? 'Shop Owner' : role === 'manager' ? 'Store Manager' : 'Cashier / Barista',
             };
@@ -168,6 +181,12 @@ export default function App() {
           cleaned.unshift(INITIAL_STAFF_USERS[0]);
         } else {
           cleaned = cleaned.map((u) => (u.role === 'owner' ? { ...u, fullName: 'Keny Chien' } : u));
+        }
+
+        // If no staff members exist at all besides owner, include default Store Manager
+        const hasStaff = cleaned.some((u) => u.role !== 'owner');
+        if (!hasStaff && !deletedSet.has('manager')) {
+          cleaned.push(INITIAL_STAFF_USERS[1]);
         }
         return cleaned;
       }
@@ -205,15 +224,16 @@ export default function App() {
           if (remote.categories && remote.categories.length > 0) {
             setCategories(remote.categories);
           }
-          const deletedUsernames = getLocalDeleted(STORAGE_KEY_DELETED_USERS, ['manager', 'cashier']);
+          const deletedUsernames = getLocalDeleted(STORAGE_KEY_DELETED_USERS);
           const deletedProducts = getLocalDeleted(STORAGE_KEY_DELETED_PRODUCTS);
           const deletedIngredients = getLocalDeleted(STORAGE_KEY_DELETED_INGREDIENTS);
 
           if (remote.products && remote.products.length > 0) {
             setProducts((prev) => {
               const activeRemote = remote.products.filter((p) => {
-                const idMatch = deletedProducts.has(String(p.id).toLowerCase().trim());
-                const nameMatch = deletedProducts.has((p.name || '').toLowerCase().trim());
+                if (!p) return false;
+                const idMatch = deletedProducts.has(String(p.id || '').toLowerCase().trim());
+                const nameMatch = deletedProducts.has(String(p.name || '').toLowerCase().trim());
                 return !idMatch && !nameMatch;
               });
 
@@ -221,9 +241,14 @@ export default function App() {
                 // Check if this product already has a user-set custom image locally
                 const existingLocal = prev.find(
                   (lp) =>
-                    String(lp.id) === String(p.id) ||
-                    lp.name.trim().toLowerCase() === p.name.trim().toLowerCase()
+                    String(lp?.id || '') === String(p.id || '') ||
+                    String(lp?.name || '').trim().toLowerCase() === String(p.name || '').trim().toLowerCase()
                 );
+
+                // If remote product already has a Supabase Storage CDN URL, use it!
+                const isSupabaseCdnUrl =
+                  p.image &&
+                  (p.image.includes('supabase.co/storage') || p.image.includes('/storage/v1/object/public/images/'));
 
                 // If local has a valid custom image (uploaded photo, /uploads/, or custom url), preserve it!
                 const hasCustomLocalImage =
@@ -231,9 +256,12 @@ export default function App() {
                   !existingLocal.image.includes('photo-1558857563-b37cf5a9c086') &&
                   (existingLocal.image.startsWith('/uploads/') ||
                     existingLocal.image.startsWith('data:image/') ||
-                    existingLocal.image.startsWith('/product-'));
+                    existingLocal.image.startsWith('/product-') ||
+                    existingLocal.image.includes('supabase.co/storage'));
 
-                const finalImage = hasCustomLocalImage
+                const finalImage = isSupabaseCdnUrl
+                  ? p.image
+                  : hasCustomLocalImage
                   ? existingLocal.image
                   : getProductImageUrl(p.name, p.categoryId, p.image);
 
@@ -243,13 +271,19 @@ export default function App() {
                 };
               });
 
-              const remoteNames = new Set(remoteSanitized.map((p) => p.name.toLowerCase()));
-              const unsynced = prev.filter(
-                (p) =>
-                  !remoteNames.has(p.name.toLowerCase()) &&
-                  !deletedProducts.has(String(p.id).toLowerCase()) &&
-                  !deletedProducts.has(p.name.toLowerCase())
+              const remoteNames = new Set(
+                remoteSanitized.map((p) => String(p?.name || '').toLowerCase().trim()).filter(Boolean)
               );
+              const unsynced = prev.filter((p) => {
+                if (!p || !p.name) return false;
+                const pName = String(p.name).toLowerCase().trim();
+                const pId = String(p.id || '').toLowerCase().trim();
+                return (
+                  !remoteNames.has(pName) &&
+                  !deletedProducts.has(pId) &&
+                  !deletedProducts.has(pName)
+                );
+              });
               unsynced.forEach((p) => supabaseSync.syncProductUpsert(p));
               return [...remoteSanitized, ...unsynced];
             });
@@ -257,18 +291,25 @@ export default function App() {
           if (remote.ingredients && remote.ingredients.length > 0) {
             setIngredients((prev) => {
               const activeRemote = remote.ingredients.filter((i) => {
-                const idMatch = deletedIngredients.has(String(i.id).toLowerCase().trim());
-                const nameMatch = deletedIngredients.has((i.name || '').toLowerCase().trim());
+                if (!i) return false;
+                const idMatch = deletedIngredients.has(String(i.id || '').toLowerCase().trim());
+                const nameMatch = deletedIngredients.has(String(i.name || '').toLowerCase().trim());
                 return !idMatch && !nameMatch;
               });
 
-              const remoteNames = new Set(activeRemote.map((i) => i.name.toLowerCase()));
-              const unsynced = prev.filter(
-                (i) =>
-                  !remoteNames.has(i.name.toLowerCase()) &&
-                  !deletedIngredients.has(String(i.id).toLowerCase()) &&
-                  !deletedIngredients.has(i.name.toLowerCase())
+              const remoteNames = new Set(
+                activeRemote.map((i) => String(i?.name || '').toLowerCase().trim()).filter(Boolean)
               );
+              const unsynced = prev.filter((i) => {
+                if (!i || !i.name) return false;
+                const iName = String(i.name).toLowerCase().trim();
+                const iId = String(i.id || '').toLowerCase().trim();
+                return (
+                  !remoteNames.has(iName) &&
+                  !deletedIngredients.has(iId) &&
+                  !deletedIngredients.has(iName)
+                );
+              });
               unsynced.forEach((i) => supabaseSync.syncIngredientUpsert(i));
               return [...activeRemote, ...unsynced];
             });
@@ -278,29 +319,38 @@ export default function App() {
           }
           if (remote.users && remote.users.length > 0) {
             setUsersList((prev) => {
-              // Exclude demo accounts and deleted users
               const activeRemote = remote.users.filter((u) => {
-                const un = (u.username || '').toLowerCase().trim();
-                if (deletedUsernames.has(un)) return false;
-                if (un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera')) return false;
-                return true;
+                if (!u) return false;
+                const un = String(u.username || '').toLowerCase().trim();
+                return Boolean(un) && !deletedUsernames.has(un);
               });
 
-              const remoteUsernames = new Set(activeRemote.map((u) => u.username.toLowerCase()));
+              const remoteUsernames = new Set(
+                activeRemote.map((u) => String(u?.username || '').toLowerCase().trim()).filter(Boolean)
+              );
               const unsyncedLocal = prev.filter((u) => {
-                const un = (u.username || '').toLowerCase().trim();
-                return (
-                  !remoteUsernames.has(un) &&
-                  !deletedUsernames.has(un) &&
-                  !(un === 'cashier' && (u.fullName === 'Cashier Staff' || u.fullName === 'Alexander Rivera'))
-                );
+                if (!u) return false;
+                const un = String(u.username || '').toLowerCase().trim();
+                return Boolean(un) && !remoteUsernames.has(un) && !deletedUsernames.has(un);
+              });
+
+              // Push any unsynced local staff accounts to Supabase
+              unsyncedLocal.forEach((u) => {
+                if (u.role !== 'owner') {
+                  supabaseSync.syncUserUpsert(u);
+                }
               });
 
               const combined = [...activeRemote, ...unsyncedLocal];
-              const hasOwner = combined.some((u) => u.role === 'owner');
+              const hasOwner = combined.some((u) => u?.role === 'owner');
               if (!hasOwner) {
                 combined.unshift(INITIAL_STAFF_USERS[0]);
               }
+              const hasStaff = combined.some((u) => u?.role !== 'owner');
+              if (!hasStaff && !deletedUsernames.has('manager')) {
+                combined.push(INITIAL_STAFF_USERS[1]);
+              }
+              localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(combined));
               return combined;
             });
           }
@@ -523,17 +573,27 @@ export default function App() {
 
   // Staff Accounts Management + Auto Supabase Sync
   const handleAddUser = (newUser: User) => {
-    setUsersList((prev) => [...prev, newUser]);
+    removeLocalDeleted(STORAGE_KEY_DELETED_USERS, newUser.username);
+    setUsersList((prev) => {
+      const next = prev.filter(
+        (u) => (u?.username || '').toLowerCase() !== (newUser?.username || '').toLowerCase()
+      );
+      const updated = [...next, newUser];
+      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(updated));
+      return updated;
+    });
     // Automatically save user in Supabase
     supabaseSync.syncUserUpsert(newUser);
   };
 
   const handleUpdateUser = (username: string, updates: Partial<User>) => {
+    const targetUn = (username || '').toLowerCase().trim();
     setUsersList((prev) => {
       const next = prev.map((u) =>
-        u.username.toLowerCase() === username.toLowerCase() ? { ...u, ...updates } : u
+        (u?.username || '').toLowerCase().trim() === targetUn ? { ...u, ...updates } : u
       );
-      const target = next.find((u) => u.username.toLowerCase() === username.toLowerCase());
+      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(next));
+      const target = next.find((u) => (u?.username || '').toLowerCase().trim() === targetUn);
       if (target) {
         // Automatically save updated user in Supabase
         supabaseSync.syncUserUpsert(target);
@@ -541,7 +601,7 @@ export default function App() {
       return next;
     });
 
-    if (currentUser && currentUser.username.toLowerCase() === username.toLowerCase()) {
+    if (currentUser && (currentUser?.username || '').toLowerCase().trim() === targetUn) {
       const updatedCurrent = { ...currentUser, ...updates };
       setCurrentUser(updatedCurrent);
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedCurrent));
@@ -549,8 +609,13 @@ export default function App() {
   };
 
   const handleDeleteUser = (username: string) => {
-    addLocalDeleted(STORAGE_KEY_DELETED_USERS, username);
-    setUsersList((prev) => prev.filter((u) => u.username.toLowerCase() !== username.toLowerCase()));
+    const targetUn = (username || '').toLowerCase().trim();
+    addLocalDeleted(STORAGE_KEY_DELETED_USERS, targetUn);
+    setUsersList((prev) => {
+      const updated = prev.filter((u) => (u?.username || '').toLowerCase().trim() !== targetUn);
+      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(updated));
+      return updated;
+    });
     // Automatically delete user from Supabase
     supabaseSync.syncUserDelete(username);
   };

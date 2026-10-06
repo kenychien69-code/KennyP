@@ -274,7 +274,7 @@ export class SupabaseSyncService {
       // 2. Direct client-side delete from Supabase 'users' table
       const { url, anonKey } = getStoredSupabaseConfig();
       if (url && anonKey) {
-        const cleanUsername = username.toLowerCase().trim();
+        const cleanUsername = String(username || '').toLowerCase().trim();
         const cleanEmail = `${cleanUsername}@kennybrew.com`;
         const baseUrl = url.replace(/\/$/, '');
         await fetch(`${baseUrl}/rest/v1/users?email=eq.${cleanEmail}`, {

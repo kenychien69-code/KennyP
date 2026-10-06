@@ -81,7 +81,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
 
     // 2. Check if created staff member in usersList
     const staffMatch = usersList.find(
-      (u) => u.username.trim().toLowerCase() === cleanUsername
+      (u) => String(u?.username || '').trim().toLowerCase() === cleanUsername
     );
 
     if (staffMatch) {

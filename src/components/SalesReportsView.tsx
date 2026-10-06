@@ -26,10 +26,11 @@ export const SalesReportsView: React.FC<SalesReportsViewProps> = ({
 
   const filteredOrders = orders.filter((ord) => {
     const matchesMethod = selectedMethod === 'All' || ord.paymentMethod === selectedMethod;
+    const sTerm = String(searchQuery || '').toLowerCase();
     const matchesSearch =
-      ord.orderNumber.toString().includes(searchQuery) ||
-      ord.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ord.cashierName.toLowerCase().includes(searchQuery.toLowerCase());
+      String(ord.orderNumber || '').includes(searchQuery) ||
+      String(ord.customerName || '').toLowerCase().includes(sTerm) ||
+      String(ord.cashierName || '').toLowerCase().includes(sTerm);
     return matchesMethod && matchesSearch;
   });
 

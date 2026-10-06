@@ -79,7 +79,7 @@ export const POSView: React.FC<POSViewProps> = ({
   // Filter products
   const filteredProducts = products.filter((prod) => {
     const matchesCat = selectedCategory === 'cat-all' || prod.categoryId === selectedCategory;
-    const matchesSearch = prod.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = String(prod?.name || '').toLowerCase().includes(String(searchQuery || '').toLowerCase());
     return matchesCat && matchesSearch;
   });
 
@@ -263,7 +263,7 @@ export const POSView: React.FC<POSViewProps> = ({
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-1"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      if (!target.src.includes('product-boba-tea.jpg') && prod.name.toLowerCase().includes('tea')) {
+                      if (!target.src.includes('product-boba-tea.jpg') && String(prod?.name || '').toLowerCase().includes('tea')) {
                         target.src = '/product-boba-tea.jpg';
                       } else {
                         target.style.opacity = '0';
@@ -479,7 +479,7 @@ export const POSView: React.FC<POSViewProps> = ({
                     className="w-full h-full object-cover relative z-1"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      if (!target.src.includes('product-boba-tea.jpg') && customizingProduct.name.toLowerCase().includes('tea')) {
+                      if (!target.src.includes('product-boba-tea.jpg') && String(customizingProduct?.name || '').toLowerCase().includes('tea')) {
                         target.src = '/product-boba-tea.jpg';
                       } else {
                         (e.target as HTMLElement).style.opacity = '0';

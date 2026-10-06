@@ -127,7 +127,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
       return;
     }
 
-    if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+    if (users.some((u) => String(u?.username || '').toLowerCase().trim() === cleanUsername)) {
       setFormError(`Username @${cleanUsername} is already taken.`);
       return;
     }
@@ -164,9 +164,11 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
 
   // Filter staff by search and role
   const filteredStaff = staffOnlyUsers.filter((u) => {
-    const matchesSearch =
-      u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!u) return false;
+    const uName = String(u.username || '').toLowerCase();
+    const fName = String(u.fullName || (u as any).name || '').toLowerCase();
+    const sTerm = String(searchTerm || '').toLowerCase();
+    const matchesSearch = uName.includes(sTerm) || fName.includes(sTerm);
     const matchesRole =
       roleFilter === 'all' ||
       (roleFilter === 'manager' ? u.role === 'manager' : u.role !== 'manager');
@@ -273,17 +275,17 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   filteredStaff.map((u) => {
                     const roleMeta = ROLE_PERMISSIONS[u.role] || ROLE_PERMISSIONS.cashier;
                     return (
-                      <tr key={u.username} className="hover:bg-[#FAF7F2] transition-colors">
+                      <tr key={u.username || u.id} className="hover:bg-[#FAF7F2] transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-[#EBDBC9] text-[#542F1E] flex items-center justify-center font-bold text-xs uppercase">
-                              {u.username.slice(0, 2)}
+                              {(u.username || 'ST').slice(0, 2)}
                             </div>
                             <div>
                               <div className="font-bold text-[#2A1810] flex items-center gap-1.5">
-                                <span>{u.fullName}</span>
+                                <span>{u.fullName || (u as any).name || u.username || 'Staff Member'}</span>
                               </div>
-                              <div className="text-[11px] text-[#7A6452] font-mono">@{u.username}</div>
+                              <div className="text-[11px] text-[#7A6452] font-mono">@{u.username || 'staff'}</div>
                             </div>
                           </div>
                         </td>
@@ -405,8 +407,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   onChange={(e) => setFormRole(e.target.value as 'cashier' | 'manager')}
                   className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8DFC8] rounded-lg text-sm text-[#2A1810] focus:outline-none focus:border-[#8A4A28] cursor-pointer"
                 >
-                  <option value="cashier">Cashier / Barista (POS Register Access)</option>
-                  <option value="manager">Store Manager (Operations, Inventory, Reports & Forecasting)</option>
+                  <option value="cashier">Cashier / Barista</option>
+                  <option value="manager">Store Manager</option>
                 </select>
                 <p className="text-[11px] text-[#8C7355] mt-1">
                   {formRole === 'manager'
@@ -487,8 +489,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   onChange={(e) => setFormRole(e.target.value as 'cashier' | 'manager')}
                   className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8DFC8] rounded-lg text-sm text-[#2A1810] focus:outline-none focus:border-[#8A4A28] cursor-pointer"
                 >
-                  <option value="cashier">Cashier / Barista (POS Register Access)</option>
-                  <option value="manager">Store Manager (Operations, Inventory, Reports & Forecasting)</option>
+                  <option value="cashier">Cashier / Barista</option>
+                  <option value="manager">Store Manager</option>
                 </select>
               </div>
 

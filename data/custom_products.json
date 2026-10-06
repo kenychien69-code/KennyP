@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "id": "10",
+    "name": "Milk TAE",
+    "categoryId": "cat_milktea",
+    "price": 120,
+    "description": "Fresh handcrafted specialty drink.",
+    "image": "https://yppehqowqgeyydsgnyrj.supabase.co/storage/v1/object/public/images/prod_milk_tae_1791283247201.jpg",
+    "isAvailable": true,
+    "salesWeight": 0.15,
+    "recipe": [
+      {
+        "ingredientId": "ing_beans_espresso",
+        "amount": 18
+      },
+      {
+        "ingredientId": "ing_fresh_milk",
+        "amount": 180
+      },
+      {
+        "ingredientId": "ing_cup_16oz",
+        "amount": 1
+      }
+    ]
+  }
+]

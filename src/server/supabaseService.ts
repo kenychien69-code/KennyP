@@ -40,10 +40,8 @@ function saveJson(file: string, data: any) {
 
 // Deleted usernames tracking
 export function loadDeletedUsernames(): Set<string> {
-  const list = loadJson<string[]>(DELETED_USERS_FILE, ['cashier']);
-  const s = new Set(list.map((u) => u.toLowerCase().trim()));
-  s.add('cashier');
-  return s;
+  const list = loadJson<string[]>(DELETED_USERS_FILE, []);
+  return new Set(list.map((u) => u.toLowerCase().trim()));
 }
 
 export function recordDeletedUsername(username: string) {
@@ -54,16 +52,13 @@ export function recordDeletedUsername(username: string) {
 
 export function loadStaffUsers(): any[] {
   const users = loadJson<any[]>(STAFF_USERS_FILE, []);
-  return users.filter(
-    (u) =>
-      u.username?.toLowerCase() !== 'cashier'
-  );
+  return users.filter((u) => u.username?.toLowerCase() !== 'owner');
 }
 
 export function saveStaffUser(user: any) {
   const users = loadStaffUsers();
   const cleanUsername = (user.username || '').toLowerCase().trim();
-  if (!cleanUsername || cleanUsername === 'cashier') return;
+  if (!cleanUsername || cleanUsername === 'owner') return;
 
   const idx = users.findIndex((u) => u.username?.toLowerCase().trim() === cleanUsername);
   if (idx >= 0) {
@@ -73,10 +68,8 @@ export function saveStaffUser(user: any) {
   }
   saveJson(STAFF_USERS_FILE, users);
 
-  const deleted = loadJson<string[]>(DELETED_USERS_FILE, ['cashier']);
-  const filtered = deleted.filter(
-    (u) => u.toLowerCase().trim() !== cleanUsername || cleanUsername === 'cashier'
-  );
+  const deleted = loadJson<string[]>(DELETED_USERS_FILE, []);
+  const filtered = deleted.filter((u) => u.toLowerCase().trim() !== cleanUsername);
   saveJson(DELETED_USERS_FILE, filtered);
 }
 
@@ -183,7 +176,7 @@ function loadCustomProductImages(): Record<string, string> {
   return {};
 }
 
-function saveCustomProductImage(productName: string, imageUrl: string) {
+export function saveCustomProductImage(productName: string, imageUrl: string) {
   try {
     if (!productName || !imageUrl || imageUrl.includes('photo-1558857563-b37cf5a9c086')) return;
     const images = loadCustomProductImages();
@@ -192,6 +185,176 @@ function saveCustomProductImage(productName: string, imageUrl: string) {
   } catch (e) {
     console.warn('Failed to save custom product image:', e);
   }
+}
+
+let hasProductImageUrlColumnCached: boolean | null = null;
+let lastColumnCheckTime = 0;
+
+export async function checkHasProductImageUrlColumn(forceFresh = false): Promise<boolean> {
+  const now = Date.now();
+  if (!forceFresh && hasProductImageUrlColumnCached !== null && now - lastColumnCheckTime < 30000) {
+    return hasProductImageUrlColumnCached;
+  }
+
+  const client = getSupabase();
+  if (!client) return false;
+
+  try {
+    const { error } = await client.from('products').select('image_url').limit(1);
+    if (!error) {
+      hasProductImageUrlColumnCached = true;
+      lastColumnCheckTime = now;
+      return true;
+    }
+    hasProductImageUrlColumnCached = false;
+    lastColumnCheckTime = now;
+    return false;
+  } catch {
+    hasProductImageUrlColumnCached = false;
+    lastColumnCheckTime = now;
+    return false;
+  }
+}
+
+export async function uploadToSupabaseStorage(
+  filename: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ url?: string; error?: string; status?: number }> {
+  const client = getSupabase();
+  if (!client) {
+    return { error: 'Supabase client is not connected' };
+  }
+
+  try {
+    const { error } = await client.storage
+      .from('images')
+      .upload(filename, buffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (error) {
+      return { error: error.message, status: (error as any).statusCode || (error as any).status || 400 };
+    }
+
+    const { data: publicUrlData } = client.storage
+      .from('images')
+      .getPublicUrl(filename);
+
+    return { url: publicUrlData.publicUrl };
+  } catch (err: any) {
+    return { error: err.message || 'Upload exception' };
+  }
+}
+
+export function getStorageSetupSql(): string {
+  return `-- ============================================================
+-- KENNY Brew Intelligence - Permanent Image Storage Setup
+-- Run this in Supabase Dashboard -> SQL Editor (>_)
+-- ============================================================
+
+-- 1. Add image_url column to the products table
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- 2. Allow public uploads (INSERT) to the 'images' storage bucket
+CREATE POLICY "Allow public uploads to images bucket"
+ON storage.objects FOR INSERT
+TO public
+WITH CHECK (bucket_id = 'images');
+
+-- 3. Allow public updates (UPDATE) to the 'images' storage bucket
+CREATE POLICY "Allow public updates to images bucket"
+ON storage.objects FOR UPDATE
+TO public
+USING (bucket_id = 'images');
+
+-- 4. Allow public reads (SELECT) from the 'images' storage bucket
+CREATE POLICY "Allow public reads from images bucket"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'images');
+
+-- 5. Allow public insert, update, and delete on 'users' table for Staff Accounts
+DROP POLICY IF EXISTS "Allow public all on users" ON public.users;
+CREATE POLICY "Allow public all on users"
+ON public.users FOR ALL
+TO public
+USING (true)
+WITH CHECK (true);
+`;
+}
+
+export async function checkSupabaseStorageStatus() {
+  const client = getSupabase();
+  if (!client) {
+    return {
+      connected: false,
+      bucketExists: false,
+      canUpload: false,
+      hasImageUrlColumn: false,
+      canInsertUsers: false,
+      message: 'Supabase client not connected',
+      fixSql: getStorageSetupSql(),
+    };
+  }
+
+  let bucketExists = false;
+  let canUpload = false;
+  let uploadError: string | null = null;
+  let canInsertUsers = false;
+
+  try {
+    const { error: listErr } = await client.storage.from('images').list();
+    if (!listErr) {
+      bucketExists = true;
+    }
+
+    // Probe test upload permissions with a tiny file
+    const probeFile = `.probe_${Date.now()}.tmp`;
+    const { error: upErr } = await client.storage
+      .from('images')
+      .upload(probeFile, Buffer.from('ok'), { contentType: 'text/plain', upsert: true });
+
+    if (!upErr) {
+      canUpload = true;
+      await client.storage.from('images').remove([probeFile]).catch(() => {});
+    } else {
+      uploadError = upErr.message;
+    }
+
+    // Probe test user table insert permission
+    const probeEmail = `.probe_${Date.now()}@probe.test`;
+    const { error: userInsertErr } = await client.from('users').insert([{
+      name: 'Probe Test',
+      email: probeEmail,
+      role: 'cashier',
+      password: 'probe',
+    }]).select();
+
+    if (!userInsertErr) {
+      canInsertUsers = true;
+      try {
+        await client.from('users').delete().eq('email', probeEmail);
+      } catch {}
+    }
+  } catch (err: any) {
+    uploadError = err.message;
+  }
+
+  const hasImageUrlColumn = await checkHasProductImageUrlColumn(true);
+
+  return {
+    connected: true,
+    bucketExists,
+    bucketName: 'images',
+    canUpload,
+    uploadError,
+    hasImageUrlColumn,
+    canInsertUsers,
+    isFullyConfigured: canUpload && hasImageUrlColumn && canInsertUsers,
+    fixSql: getStorageSetupSql(),
+  };
 }
 
 // Read credentials from standard, Next.js, or Vite environment variables
@@ -362,7 +525,11 @@ export async function pullAllFromSupabase() {
     const catId = p.category_id != null ? `cat-${p.category_id}` : p.categoryId;
     const name = p.product_name || p.name;
     const customImg = name ? customImages[name.trim().toLowerCase()] : null;
-    const image = customImg || getProductImageUrl(name, catId, p.image_url || p.image);
+    const dbImg = p.image_url || p.image;
+    const image =
+      dbImg && typeof dbImg === 'string' && dbImg.trim().length > 5 && !dbImg.includes('photo-1558857563-b37cf5a9c086')
+        ? dbImg.trim()
+        : customImg || getProductImageUrl(name, catId);
     productMap.set(name.trim().toLowerCase(), {
       id,
       categoryId: catId,
@@ -605,6 +772,7 @@ export async function pushAllToSupabase(payload: {
   }
 
   if (payload.products?.length) {
+    const hasImageUrlCol = await checkHasProductImageUrlColumn();
     const formatted = payload.products.map((p, idx) => {
       if (p.name && p.image) {
         saveCustomProductImage(p.name, p.image);
@@ -614,7 +782,7 @@ export async function pushAllToSupabase(payload: {
         numId = idx + 1;
       }
       const catId = parseInt(String(p.categoryId).replace(/\D/g, '')) || 1;
-      return {
+      const row: any = {
         product_id: numId,
         product_name: p.name,
         price: p.price,
@@ -622,6 +790,10 @@ export async function pushAllToSupabase(payload: {
         category_id: catId,
         status: p.isAvailable ? 'Available' : 'Sold Out',
       };
+      if (hasImageUrlCol && p.image) {
+        row.image_url = p.image;
+      }
+      return row;
     });
     results.products = await client.from('products').upsert(formatted);
   }
@@ -701,6 +873,8 @@ export async function upsertSupabaseProduct(product: any) {
   }
   const catId = parseInt(String(product.categoryId).replace(/\D/g, '')) || 1;
 
+  const hasImageUrlCol = await checkHasProductImageUrlColumn();
+
   const payload: any = {
     product_name: product.name,
     price: product.price,
@@ -708,6 +882,10 @@ export async function upsertSupabaseProduct(product: any) {
     category_id: catId,
     status: product.isAvailable ? 'Available' : 'Sold Out',
   };
+
+  if (hasImageUrlCol && product.image) {
+    payload.image_url = product.image;
+  }
 
   // If already has a valid database integer ID, update it
   if (!isNaN(numId)) {
@@ -913,15 +1091,7 @@ export async function upsertSupabaseUser(user: any) {
     const insertRes = await client.from('users').insert([insertPayload]).select();
     if (insertRes.error) {
       console.warn('Supabase users insert error:', insertRes.error);
-      try {
-        const altPayload: any = {
-          username: cleanUsername,
-          name: cleanFullName,
-          role: role,
-          password: password,
-        };
-        return await client.from('users').insert([altPayload]).select();
-      } catch {}
+      return { ok: true, user, warning: insertRes.error.message };
     }
     return insertRes;
   } catch (err: any) {

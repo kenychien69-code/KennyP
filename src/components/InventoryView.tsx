@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Ingredient, Product } from '../types';
 import { getProductImageUrl } from '../utils/productImages';
+import { StorageSetupModal } from './StorageSetupModal';
 import {
   Boxes,
   AlertTriangle,
@@ -25,6 +26,7 @@ import {
   Sparkles,
   XCircle,
   Edit2,
+  CloudUpload,
 } from 'lucide-react';
 
 const PRESET_PRODUCT_IMAGES = [
@@ -120,6 +122,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [imageUploadMethod, setImageUploadMethod] = useState<'upload' | 'url' | 'presets'>('upload');
   const [imageError, setImageError] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [showStorageModal, setShowStorageModal] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -195,6 +198,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             setNewProdImage(uploadData.url);
           }
         }
+        if (uploadData.storage === 'supabase') {
+          showToast('Image uploaded permanently to Supabase Storage CDN!');
+        } else if (uploadData.warning) {
+          showToast('Image uploaded locally. Click "Cloud Image Storage" to enable permanent cloud hosting.');
+        }
       }
     } catch (err: any) {
       console.warn('Image processing notice:', err);
@@ -212,7 +220,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const filteredIngredients = ingredients.filter((item) => {
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = String(item?.name || '').toLowerCase().includes(String(searchQuery || '').toLowerCase());
     return matchesCat && matchesSearch;
   });
 
@@ -220,7 +228,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const filteredProducts = products.filter((p) => {
     const matchesCat = productCatFilter === 'All' || p.categoryId === productCatFilter;
-    const matchesSearch = p.name.toLowerCase().includes(productSearch.toLowerCase());
+    const matchesSearch = String(p?.name || '').toLowerCase().includes(String(productSearch || '').toLowerCase());
     return matchesCat && matchesSearch;
   });
 
@@ -366,13 +374,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         {/* Tab Switcher & Quick Add Buttons */}
         <div className="flex items-center gap-2">
           {activeSubTab === 'products' ? (
-            <button
-              onClick={() => setShowAddProductModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#4E342E] hover:bg-[#3E2723] text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Product</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowStorageModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#FAF7F2] hover:bg-[#EFE7DC] border border-[#D5C2B1] text-[#3D291C] rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                title="Configure permanent Supabase Cloud Image Storage"
+              >
+                <CloudUpload className="w-3.5 h-3.5 text-[#8A4A28]" />
+                <span>Cloud Image Storage</span>
+              </button>
+              <button
+                onClick={() => setShowAddProductModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#4E342E] hover:bg-[#3E2723] text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Product</span>
+              </button>
+            </>
           ) : (
             <button
               onClick={() => setShowAddIngredientModal(true)}
@@ -1154,6 +1173,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     <span className="text-[10px] text-[#7A6452] block">
                       PNG, JPG, WebP up to 5MB
                     </span>
+                    {editImage && editImage.includes('supabase.co/storage') ? (
+                      <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold inline-flex items-center gap-1 mt-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Hosted on Supabase Storage
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowStorageModal(true)}
+                        className="text-[10px] text-[#8A4A28] hover:underline flex items-center gap-1 font-semibold cursor-pointer mt-1"
+                      >
+                        <CloudUpload className="w-3 h-3" /> Setup permanent cloud storage
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1561,6 +1593,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Permanent Cloud Image Storage Modal */}
+      <StorageSetupModal
+        isOpen={showStorageModal}
+        onClose={() => setShowStorageModal(false)}
+      />
     </div>
   );
 };

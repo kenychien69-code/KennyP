@@ -64,9 +64,10 @@ export const LowStockAlertsView: React.FC<LowStockAlertsViewProps> = ({
   const alertCount = criticalItems.length + warningItems.length;
 
   const filteredItems = processedIngredients.filter((item) => {
+    const sTerm = String(searchTerm || '').toLowerCase();
     const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase());
+      String(item?.name || '').toLowerCase().includes(sTerm) ||
+      String(item?.category || '').toLowerCase().includes(sTerm);
     const matchesFilter =
       statusFilter === 'all' ||
       (statusFilter === 'critical' && item.status === 'critical') ||

@@ -64,14 +64,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1 border-b border-[#E8DFC8]">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-[#2A1810] tracking-tight">
-              Sales Dashboard
-            </h1>
-            <span className="text-[11px] font-semibold bg-[#EFE4D6] text-[#7A4B29] px-2 py-0.5 rounded border border-[#DECDBB]">
-              KENNY Brew Intelligence
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold text-[#2A1810] tracking-tight">
+            Sales Dashboard
+          </h1>
           <p className="text-xs text-[#7A6452] mt-0.5">
             Today: {todayFormatted} • Live Point-of-Sale & Business Intelligence
           </p>
