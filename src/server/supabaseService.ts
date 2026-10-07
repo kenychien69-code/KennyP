@@ -604,7 +604,7 @@ export async function pullAllFromSupabase() {
   const ownerName =
     rawOwner?.name &&
     rawOwner.name !== 'Shop Owner' &&
-    rawOwner.name !== 'Kenny Chien (Shop Owner)'
+    rawOwner.name !== 'Keny Chien'
       ? rawOwner.name
       : 'Keny Chien';
 
