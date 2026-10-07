@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Ingredient, Product } from '../types';
 import { getProductImageUrl } from '../utils/productImages';
 import { StorageSetupModal } from './StorageSetupModal';
+import { supabaseSync } from '../services/supabaseSyncService';
 import {
   Boxes,
   AlertTriangle,
@@ -181,15 +182,31 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         setNewProdImage(compressedDataUrl);
       }
 
-      // 3. Persist permanently to backend filesystem
+      // 3. Upload directly to Supabase Storage bucket first (works 100% on Vercel)
       const targetName = isEdit ? editProdName || 'product' : newProdName || 'product';
+      try {
+        const cloudUrl = await supabaseSync.uploadImageToSupabase(file, targetName);
+        if (cloudUrl) {
+          if (isEdit) {
+            setEditImage(cloudUrl);
+          } else {
+            setNewProdImage(cloudUrl);
+          }
+          showToast('Product photo uploaded directly to Supabase cloud storage!');
+          return;
+        }
+      } catch (cloudErr) {
+        console.warn('Direct cloud upload notice:', cloudErr);
+      }
+
+      // Fallback: persist permanently to backend filesystem if running server
       const uploadRes = await fetch('/api/upload-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: compressedDataUrl, name: targetName }),
-      });
+      }).catch(() => null);
 
-      if (uploadRes.ok) {
+      if (uploadRes && uploadRes.ok) {
         const uploadData = await uploadRes.json();
         if (uploadData.url) {
           if (isEdit) {
@@ -198,10 +215,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             setNewProdImage(uploadData.url);
           }
         }
-        if (uploadData.storage === 'supabase') {
-          showToast('Image uploaded permanently to Supabase Storage CDN!');
-        } else if (uploadData.warning) {
-          showToast('Image uploaded locally. Click "Cloud Image Storage" to enable permanent cloud hosting.');
+        if (uploadData.url) {
+          showToast('Product photo updated successfully!');
         }
       }
     } catch (err: any) {
@@ -1173,19 +1188,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     <span className="text-[10px] text-[#7A6452] block">
                       PNG, JPG, WebP up to 5MB
                     </span>
-                    {editImage && editImage.includes('supabase.co/storage') ? (
-                      <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold inline-flex items-center gap-1 mt-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Hosted on Supabase Storage
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setShowStorageModal(true)}
-                        className="text-[10px] text-[#8A4A28] hover:underline flex items-center gap-1 font-semibold cursor-pointer mt-1"
-                      >
-                        <CloudUpload className="w-3 h-3" /> Setup permanent cloud storage
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

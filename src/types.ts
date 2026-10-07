@@ -84,6 +84,8 @@ export interface DailySalesRecord {
   date: string; // YYYY-MM-DD
   total: number;
   ordersCount: number;
+  totalSales?: number;
+  averageTicket?: number;
 }
 
 export interface ForecastDay {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  CartItem,
   DailySalesRecord,
   ForecastResult,
   Ingredient,
@@ -13,7 +12,6 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_HISTORICAL_SALES,
   INITIAL_INGREDIENTS,
-  INITIAL_ORDERS,
   INITIAL_PRODUCTS,
 } from './data/initialData';
 import { generateSalesForecast, normalizeForecastResult } from './utils/forecastEngine';
@@ -26,56 +24,14 @@ import { InventoryView } from './components/InventoryView';
 import { SalesReportsView } from './components/SalesReportsView';
 import { UserAccountsView } from './components/UserAccountsView';
 import { LowStockAlertsView } from './components/LowStockAlertsView';
-import { LoginView, SHARED_PASSWORD } from './components/LoginView';
+import { LoginView } from './components/LoginView';
 import { supabaseSync } from './services/supabaseSyncService';
 import { ReceiptModal } from './components/ReceiptModal';
-import { getProductImageUrl } from './utils/productImages';
+import { LatteArtLogo } from './components/LatteArtLogo';
 
-const STORAGE_KEY_PRODUCTS = 'kenny_brew_products_v4';
-const STORAGE_KEY_INGREDIENTS = 'kenny_brew_ingredients_v4';
-const STORAGE_KEY_ORDERS = 'kenny_brew_orders_v4';
-const STORAGE_KEY_HISTORICAL = 'kenny_brew_historical_v4';
-const STORAGE_KEY_USER = 'kenny_brew_current_user_v4';
-const STORAGE_KEY_USERS_LIST = 'kenny_brew_users_list_v4';
-const STORAGE_KEY_DELETED_USERS = 'kenny_brew_deleted_users_v4';
-const STORAGE_KEY_DELETED_PRODUCTS = 'kenny_brew_deleted_products_v4';
-const STORAGE_KEY_DELETED_INGREDIENTS = 'kenny_brew_deleted_ingredients_v4';
+const SESSION_KEY_USER = 'kenny_brew_session_user';
 
-function getLocalDeleted(key: string, initial: string[] = []): Set<string> {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed: string[] = raw ? JSON.parse(raw) : initial;
-    return new Set(parsed.map((s) => String(s).toLowerCase().trim()));
-  } catch {
-    return new Set(initial.map((s) => String(s).toLowerCase().trim()));
-  }
-}
-
-function addLocalDeleted(key: string, ...items: (string | undefined)[]) {
-  try {
-    const current = getLocalDeleted(key);
-    for (const item of items) {
-      if (item) current.add(String(item).toLowerCase().trim());
-    }
-    localStorage.setItem(key, JSON.stringify(Array.from(current)));
-  } catch (e) {
-    console.warn('Failed to save deleted keys:', e);
-  }
-}
-
-function removeLocalDeleted(key: string, ...items: (string | undefined)[]) {
-  try {
-    const current = getLocalDeleted(key);
-    for (const item of items) {
-      if (item) current.delete(String(item).toLowerCase().trim());
-    }
-    localStorage.setItem(key, JSON.stringify(Array.from(current)));
-  } catch (e) {
-    console.warn('Failed to remove deleted keys:', e);
-  }
-}
-
-// Initial staff accounts for store roles (Owner acts as Administrator)
+// Initial staff accounts fallback
 const INITIAL_STAFF_USERS: User[] = [
   {
     id: 'usr-owner',
@@ -85,116 +41,58 @@ const INITIAL_STAFF_USERS: User[] = [
     roleTitle: 'Shop Owner',
     lastLogin: 'Today',
     createdAt: '2026-01-01',
-  },
-  {
-    id: 'usr-manager',
-    username: 'manager',
-    role: 'manager',
-    fullName: 'Maria Santos (Store Manager)',
-    roleTitle: 'Store Manager',
-    lastLogin: 'Today',
-    createdAt: '2026-01-02',
+    password: 'kenny123',
   },
 ];
 
 export default function App() {
-  // Authentication State with session persistence
+  // Clear any obsolete localStorage keys once on boot to prevent browser data conflicts
+  useEffect(() => {
+    try {
+      [
+        'kenny_brew_products_v4',
+        'kenny_brew_ingredients_v4',
+        'kenny_brew_orders_v4',
+        'kenny_brew_historical_v4',
+        'kenny_brew_users_list_v4',
+        'kenny_brew_deleted_users_v4',
+        'kenny_brew_deleted_products_v4',
+        'kenny_brew_deleted_ingredients_v4',
+        'kenny_brew_current_user_v4',
+        'kenny_brew_supabase_url',
+        'kenny_brew_supabase_anon',
+      ].forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  }, []);
+
+  // Authentication State with browser session persistence
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_USER);
+      const saved = sessionStorage.getItem(SESSION_KEY_USER);
       if (saved) {
         const parsed: any = JSON.parse(saved);
-        if (parsed.username === 'cashier' && (parsed.fullName === 'Alexander Rivera' || parsed.fullName === 'Cashier Staff')) {
-          localStorage.removeItem(STORAGE_KEY_USER);
-          return null;
-        }
         if (parsed.role === 'owner') {
           parsed.fullName = 'Keny Chien';
-          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(parsed));
         }
         return parsed as User;
       }
-      return null;
-    } catch {
-      return null;
-    }
+    } catch {}
+    return null;
   });
 
   // Current View
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
-  // Product categories state
+  // Business Data State (strictly from Supabase cloud database)
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [ingredients, setIngredients] = useState<Ingredient[]>(INITIAL_INGREDIENTS);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [historicalSales, setHistoricalSales] = useState<DailySalesRecord[]>(INITIAL_HISTORICAL_SALES);
+  const [usersList, setUsersList] = useState<User[]>(INITIAL_STAFF_USERS);
 
-  // Business Data State (zero fake orders and historical sales)
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-    const list: Product[] = saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-    return list.map((p) => ({
-      ...p,
-      image: getProductImageUrl(p.name, p.categoryId, p.image),
-    }));
-  });
-
-  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_INGREDIENTS);
-    return saved ? JSON.parse(saved) : INITIAL_INGREDIENTS;
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_ORDERS);
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
-
-  const [historicalSales, setHistoricalSales] = useState<DailySalesRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_HISTORICAL);
-    return saved ? JSON.parse(saved) : INITIAL_HISTORICAL_SALES;
-  });
-
-  // Staff accounts state for "Manage user accounts"
-  const [usersList, setUsersList] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_USERS_LIST);
-      if (saved) {
-        const parsed: any[] = JSON.parse(saved);
-        const deletedSet = getLocalDeleted(STORAGE_KEY_DELETED_USERS);
-        let cleaned: User[] = parsed
-          .filter((u) => {
-            if (!u) return false;
-            const un = String(u.username || '').toLowerCase().trim();
-            if (deletedSet.has(un)) return false;
-            return true;
-          })
-          .map((u) => {
-            const role: UserRole = u.role === 'owner' ? 'owner' : u.role === 'manager' ? 'manager' : 'cashier';
-            return {
-              ...u,
-              username: u.username || `user_${u.id || Date.now()}`,
-              role,
-              roleTitle: role === 'owner' ? 'Shop Owner' : role === 'manager' ? 'Store Manager' : 'Cashier / Barista',
-            };
-          });
-
-        // Ensure Shop Owner is always present
-        const hasOwner = cleaned.some((u) => u.role === 'owner');
-        if (!hasOwner) {
-          cleaned.unshift(INITIAL_STAFF_USERS[0]);
-        } else {
-          cleaned = cleaned.map((u) => (u.role === 'owner' ? { ...u, fullName: 'Keny Chien' } : u));
-        }
-
-        // If no staff members exist at all besides owner, include default Store Manager
-        const hasStaff = cleaned.some((u) => u.role !== 'owner');
-        if (!hasStaff && !deletedSet.has('manager')) {
-          cleaned.push(INITIAL_STAFF_USERS[1]);
-        }
-        return cleaned;
-      }
-      return INITIAL_STAFF_USERS;
-    } catch {
-      return INITIAL_STAFF_USERS;
-    }
-  });
+  // Initial loading state while connecting to Supabase
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   // Dedicated receipt modal order for viewing anytime
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
@@ -205,223 +103,83 @@ export default function App() {
   });
   const [isForecasting, setIsForecasting] = useState(false);
 
-  // Automatic background Supabase persistence on initial boot
+  // Load live data directly from Supabase Cloud on boot
   useEffect(() => {
-    supabaseSync.checkConnection().then(async (status) => {
-      if (status.connected) {
-        // Automatically push all products, users, ingredients, and categories to Supabase
-        await supabaseSync.pushAll({
-          categories: categories.length ? categories : INITIAL_CATEGORIES,
-          products: products.length ? products : INITIAL_PRODUCTS,
-          users: usersList.length ? usersList : INITIAL_STAFF_USERS,
-          ingredients: ingredients.length ? ingredients : INITIAL_INGREDIENTS,
-          orders: orders.length ? orders : [],
-        });
+    let isMounted = true;
 
-        // Pull back synced data
+    async function loadFromSupabase() {
+      setIsLoadingData(true);
+      try {
+        await supabaseSync.checkConnection();
         const remote = await supabaseSync.pullData();
-        if (remote) {
+
+        if (isMounted && remote) {
           if (remote.categories && remote.categories.length > 0) {
             setCategories(remote.categories);
           }
-          const deletedUsernames = getLocalDeleted(STORAGE_KEY_DELETED_USERS);
-          const deletedProducts = getLocalDeleted(STORAGE_KEY_DELETED_PRODUCTS);
-          const deletedIngredients = getLocalDeleted(STORAGE_KEY_DELETED_INGREDIENTS);
-
           if (remote.products && remote.products.length > 0) {
-            setProducts((prev) => {
-              const activeRemote = remote.products.filter((p) => {
-                if (!p) return false;
-                const idMatch = deletedProducts.has(String(p.id || '').toLowerCase().trim());
-                const nameMatch = deletedProducts.has(String(p.name || '').toLowerCase().trim());
-                return !idMatch && !nameMatch;
-              });
-
-              const remoteSanitized = activeRemote.map((p) => {
-                // Check if this product already has a user-set custom image locally
-                const existingLocal = prev.find(
-                  (lp) =>
-                    String(lp?.id || '') === String(p.id || '') ||
-                    String(lp?.name || '').trim().toLowerCase() === String(p.name || '').trim().toLowerCase()
-                );
-
-                // If remote product already has a Supabase Storage CDN URL, use it!
-                const isSupabaseCdnUrl =
-                  p.image &&
-                  (p.image.includes('supabase.co/storage') || p.image.includes('/storage/v1/object/public/images/'));
-
-                // If local has a valid custom image (uploaded photo, /uploads/, or custom url), preserve it!
-                const hasCustomLocalImage =
-                  existingLocal?.image &&
-                  !existingLocal.image.includes('photo-1558857563-b37cf5a9c086') &&
-                  (existingLocal.image.startsWith('/uploads/') ||
-                    existingLocal.image.startsWith('data:image/') ||
-                    existingLocal.image.startsWith('/product-') ||
-                    existingLocal.image.includes('supabase.co/storage'));
-
-                const finalImage = isSupabaseCdnUrl
-                  ? p.image
-                  : hasCustomLocalImage
-                  ? existingLocal.image
-                  : getProductImageUrl(p.name, p.categoryId, p.image);
-
-                return {
-                  ...p,
-                  image: finalImage,
-                };
-              });
-
-              const remoteNames = new Set(
-                remoteSanitized.map((p) => String(p?.name || '').toLowerCase().trim()).filter(Boolean)
-              );
-              const unsynced = prev.filter((p) => {
-                if (!p || !p.name) return false;
-                const pName = String(p.name).toLowerCase().trim();
-                const pId = String(p.id || '').toLowerCase().trim();
-                return (
-                  !remoteNames.has(pName) &&
-                  !deletedProducts.has(pId) &&
-                  !deletedProducts.has(pName)
-                );
-              });
-              unsynced.forEach((p) => supabaseSync.syncProductUpsert(p));
-              return [...remoteSanitized, ...unsynced];
-            });
+            setProducts(remote.products);
           }
           if (remote.ingredients && remote.ingredients.length > 0) {
-            setIngredients((prev) => {
-              const activeRemote = remote.ingredients.filter((i) => {
-                if (!i) return false;
-                const idMatch = deletedIngredients.has(String(i.id || '').toLowerCase().trim());
-                const nameMatch = deletedIngredients.has(String(i.name || '').toLowerCase().trim());
-                return !idMatch && !nameMatch;
-              });
-
-              const remoteNames = new Set(
-                activeRemote.map((i) => String(i?.name || '').toLowerCase().trim()).filter(Boolean)
-              );
-              const unsynced = prev.filter((i) => {
-                if (!i || !i.name) return false;
-                const iName = String(i.name).toLowerCase().trim();
-                const iId = String(i.id || '').toLowerCase().trim();
-                return (
-                  !remoteNames.has(iName) &&
-                  !deletedIngredients.has(iId) &&
-                  !deletedIngredients.has(iName)
-                );
-              });
-              unsynced.forEach((i) => supabaseSync.syncIngredientUpsert(i));
-              return [...activeRemote, ...unsynced];
-            });
+            setIngredients(remote.ingredients);
           }
           if (remote.orders && remote.orders.length > 0) {
             setOrders(remote.orders);
           }
           if (remote.users && remote.users.length > 0) {
-            setUsersList((prev) => {
-              const activeRemote = remote.users.filter((u) => {
-                if (!u) return false;
-                const un = String(u.username || '').toLowerCase().trim();
-                return Boolean(un) && !deletedUsernames.has(un);
-              });
-
-              const remoteUsernames = new Set(
-                activeRemote.map((u) => String(u?.username || '').toLowerCase().trim()).filter(Boolean)
-              );
-              const unsyncedLocal = prev.filter((u) => {
-                if (!u) return false;
-                const un = String(u.username || '').toLowerCase().trim();
-                return Boolean(un) && !remoteUsernames.has(un) && !deletedUsernames.has(un);
-              });
-
-              // Push any unsynced local staff accounts to Supabase
-              unsyncedLocal.forEach((u) => {
-                if (u.role !== 'owner') {
-                  supabaseSync.syncUserUpsert(u);
-                }
-              });
-
-              const combined = [...activeRemote, ...unsyncedLocal];
-              const hasOwner = combined.some((u) => u?.role === 'owner');
-              if (!hasOwner) {
-                combined.unshift(INITIAL_STAFF_USERS[0]);
-              }
-              const hasStaff = combined.some((u) => u?.role !== 'owner');
-              if (!hasStaff && !deletedUsernames.has('manager')) {
-                combined.push(INITIAL_STAFF_USERS[1]);
-              }
-              localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(combined));
-              return combined;
-            });
+            setUsersList(remote.users);
           }
           if (remote.historicalSales && remote.historicalSales.length > 0) {
             setHistoricalSales(remote.historicalSales);
           }
-        }
 
-        // Also automatically pull or push sales forecast
-        const remoteForecast = await supabaseSync.pullForecast();
-        if (remoteForecast) {
-          setForecast(normalizeForecastResult(remoteForecast));
-        } else if (forecast) {
-          supabaseSync.syncForecast(forecast);
+          // Calculate forecast with live Supabase data
+          const liveForecast = generateSalesForecast(
+            remote.historicalSales || [],
+            remote.products || INITIAL_PRODUCTS,
+            remote.ingredients || INITIAL_INGREDIENTS
+          );
+          setForecast(liveForecast);
+        }
+      } catch (err) {
+        console.warn('Failed to load live data from Supabase:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingData(false);
         }
       }
-    });
+    }
+
+    loadFromSupabase();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  // Local storage persistence effects
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_INGREDIENTS, JSON.stringify(ingredients));
-  }, [ingredients]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_HISTORICAL, JSON.stringify(historicalSales));
-  }, [historicalSales]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(usersList));
-  }, [usersList]);
 
   // Adjust active tab when role changes to ensure valid view
   const adjustTabForRole = (role: UserRole) => {
     const ownerTabs: NavTab[] = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast', 'users'];
+    const managerTabs: NavTab[] = ['dashboard', 'pos', 'inventory', 'alerts', 'reports', 'forecast'];
     const cashierTabs: NavTab[] = ['pos'];
 
-    const allowed = role === 'cashier' ? cashierTabs : ownerTabs;
+    const allowed = role === 'cashier' ? cashierTabs : role === 'manager' ? managerTabs : ownerTabs;
 
     if (!allowed.includes(activeTab)) {
       setActiveTab(allowed[0]);
     }
   };
 
-  // Completely wipe state and reset to clean empty state
+  // Reset in-memory preview data without touching external storage
   const handleClearAllData = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY_ORDERS);
-      localStorage.removeItem(STORAGE_KEY_HISTORICAL);
-      localStorage.removeItem(STORAGE_KEY_PRODUCTS);
-      localStorage.removeItem(STORAGE_KEY_INGREDIENTS);
-
-      setOrders([]);
-      setHistoricalSales([]);
-      setProducts(INITIAL_PRODUCTS);
-      setIngredients(INITIAL_INGREDIENTS);
-      setForecast(generateSalesForecast([], INITIAL_PRODUCTS, INITIAL_INGREDIENTS));
-    } catch (err) {
-      console.error('Failed to clear local storage:', err);
-    }
+    setOrders([]);
+    setHistoricalSales([]);
+    setProducts(INITIAL_PRODUCTS);
+    setIngredients(INITIAL_INGREDIENTS);
+    setForecast(generateSalesForecast([], INITIAL_PRODUCTS, INITIAL_INGREDIENTS));
   };
 
-  // Recipe-based ingredient depletion upon POS sale completion + Auto Supabase Sync
+  // Recipe-based ingredient depletion upon POS sale completion + Direct Supabase Insert
   const handleCompleteOrder = (completedOrder: Order) => {
     setOrders((prev) => [completedOrder, ...prev]);
 
@@ -446,17 +204,24 @@ export default function App() {
     let todaySalesRecord: DailySalesRecord = {
       date: todayStr,
       total: completedOrder.totalAmount,
+      totalSales: completedOrder.totalAmount,
       ordersCount: 1,
+      averageTicket: completedOrder.totalAmount,
     };
 
     setHistoricalSales((prev) => {
       const existingTodayIndex = prev.findIndex((r) => r.date === todayStr);
       if (existingTodayIndex >= 0) {
         const updated = [...prev];
+        const prevTotal = updated[existingTodayIndex].total || updated[existingTodayIndex].totalSales || 0;
+        const newTotal = prevTotal + completedOrder.totalAmount;
+        const newCount = updated[existingTodayIndex].ordersCount + 1;
         todaySalesRecord = {
           ...updated[existingTodayIndex],
-          total: updated[existingTodayIndex].total + completedOrder.totalAmount,
-          ordersCount: updated[existingTodayIndex].ordersCount + 1,
+          total: newTotal,
+          totalSales: newTotal,
+          ordersCount: newCount,
+          averageTicket: Math.round(newTotal / newCount),
         };
         updated[existingTodayIndex] = todaySalesRecord;
         return updated;
@@ -465,11 +230,11 @@ export default function App() {
       }
     });
 
-    // Automatically store order, line items, and updated stock in Supabase!
+    // Automatically store order, line items, and stock movement in Supabase
     supabaseSync.syncOrder(completedOrder, updatedIngredients, todaySalesRecord);
   };
 
-  // Inventory restocking + Auto Supabase Sync
+  // Inventory restocking
   const handleRestockIngredient = (id: string, addedAmount: number) => {
     setIngredients((prev) => {
       const next = prev.map((item) => {
@@ -479,7 +244,6 @@ export default function App() {
             currentStock: item.currentStock + addedAmount,
             lastRestocked: new Date().toISOString().split('T')[0],
           };
-          // Automatically save updated ingredient in Supabase
           supabaseSync.syncIngredientUpsert(updated);
           return updated;
         }
@@ -489,7 +253,7 @@ export default function App() {
     });
   };
 
-  // Inventory update + Auto Supabase Sync
+  // Inventory update
   const handleUpdateIngredient = (id: string, updates: Partial<Ingredient>) => {
     setIngredients((prev) => {
       const next = prev.map((item) => {
@@ -498,7 +262,6 @@ export default function App() {
             ...item,
             ...updates,
           };
-          // Automatically save updated ingredient in Supabase
           supabaseSync.syncIngredientUpsert(updated);
           return updated;
         }
@@ -508,31 +271,26 @@ export default function App() {
     });
   };
 
-  // Inventory additions + Auto Supabase Sync
+  // Inventory additions
   const handleAddIngredient = (newIngredient: Ingredient) => {
     setIngredients((prev) => [...prev, newIngredient]);
-    // Automatically save new ingredient in Supabase
     supabaseSync.syncIngredientUpsert(newIngredient);
   };
 
-  // Inventory deletion + Auto Supabase Sync
+  // Inventory deletion
   const handleDeleteIngredient = (id: string) => {
-    const target = ingredients.find((item) => String(item.id) === String(id));
-    addLocalDeleted(STORAGE_KEY_DELETED_INGREDIENTS, id, target?.name);
     setIngredients((prev) => prev.filter((item) => String(item.id) !== String(id)));
-    // Automatically delete ingredient from Supabase
     supabaseSync.syncIngredientDelete(id);
   };
 
-  // Product catalog management + Auto Supabase Sync
+  // Product catalog management with direct Supabase mutations
   const handleAddProduct = async (newProduct: Product) => {
     setProducts((prev) => [...prev, newProduct]);
-    // Automatically save new product in Supabase
-    const res = await supabaseSync.syncProductUpsert(newProduct);
-    if (res && res.data && res.data[0]) {
-      const realId = String(res.data[0].product_id);
+    const saved = await supabaseSync.syncProductUpsert(newProduct);
+    if (saved && saved.product_id) {
+      const realId = String(saved.product_id);
       setProducts((prev) =>
-        prev.map((p) => (String(p.id) === String(newProduct.id) ? { ...p, id: realId } : p))
+        prev.map((p) => (p.name === newProduct.name ? { ...p, id: realId } : p))
       );
     }
   };
@@ -542,7 +300,6 @@ export default function App() {
       const next = prev.map((p) => (String(p.id) === String(productId) ? { ...p, ...updates } : p));
       const target = next.find((p) => String(p.id) === String(productId));
       if (target) {
-        // Automatically save updated product in Supabase
         supabaseSync.syncProductUpsert(target);
       }
       return next;
@@ -556,7 +313,6 @@ export default function App() {
       );
       const target = next.find((p) => String(p.id) === String(productId));
       if (target) {
-        // Automatically save availability state in Supabase
         supabaseSync.syncProductUpsert(target);
       }
       return next;
@@ -564,26 +320,28 @@ export default function App() {
   };
 
   const handleDeleteProduct = (productId: string) => {
-    const target = products.find((p) => String(p.id) === String(productId));
-    addLocalDeleted(STORAGE_KEY_DELETED_PRODUCTS, productId, target?.name);
     setProducts((prev) => prev.filter((p) => String(p.id) !== String(productId)));
-    // Automatically delete product from Supabase
     supabaseSync.syncProductDelete(productId);
   };
 
-  // Staff Accounts Management + Auto Supabase Sync
-  const handleAddUser = (newUser: User) => {
-    removeLocalDeleted(STORAGE_KEY_DELETED_USERS, newUser.username);
+  // Staff Accounts Management with direct Supabase mutations
+  const handleAddUser = async (newUser: User) => {
     setUsersList((prev) => {
       const next = prev.filter(
         (u) => (u?.username || '').toLowerCase() !== (newUser?.username || '').toLowerCase()
       );
-      const updated = [...next, newUser];
-      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(updated));
-      return updated;
+      return [...next, newUser];
     });
-    // Automatically save user in Supabase
-    supabaseSync.syncUserUpsert(newUser);
+    const saved = await supabaseSync.syncUserUpsert(newUser);
+    if (saved && saved.user_id) {
+      setUsersList((prev) =>
+        prev.map((u) =>
+          (u?.username || '').toLowerCase() === (newUser?.username || '').toLowerCase()
+            ? { ...u, id: `usr-${saved.user_id}` }
+            : u
+        )
+      );
+    }
   };
 
   const handleUpdateUser = (username: string, updates: Partial<User>) => {
@@ -592,10 +350,8 @@ export default function App() {
       const next = prev.map((u) =>
         (u?.username || '').toLowerCase().trim() === targetUn ? { ...u, ...updates } : u
       );
-      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(next));
       const target = next.find((u) => (u?.username || '').toLowerCase().trim() === targetUn);
       if (target) {
-        // Automatically save updated user in Supabase
         supabaseSync.syncUserUpsert(target);
       }
       return next;
@@ -604,24 +360,20 @@ export default function App() {
     if (currentUser && (currentUser?.username || '').toLowerCase().trim() === targetUn) {
       const updatedCurrent = { ...currentUser, ...updates };
       setCurrentUser(updatedCurrent);
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedCurrent));
+      try {
+        sessionStorage.setItem(SESSION_KEY_USER, JSON.stringify(updatedCurrent));
+      } catch {}
     }
   };
 
   const handleDeleteUser = (username: string) => {
     const targetUn = (username || '').toLowerCase().trim();
-    addLocalDeleted(STORAGE_KEY_DELETED_USERS, targetUn);
-    setUsersList((prev) => {
-      const updated = prev.filter((u) => (u?.username || '').toLowerCase().trim() !== targetUn);
-      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(updated));
-      return updated;
-    });
-    // Automatically delete user from Supabase
+    setUsersList((prev) => prev.filter((u) => (u?.username || '').toLowerCase().trim() !== targetUn));
     supabaseSync.syncUserDelete(username);
   };
 
   const handleResetPassword = (_username: string) => {
-    // Password reset is handled with in-app notice
+    // Password reset is handled in Supabase
   };
 
   // AI Forecasting Trigger
@@ -638,21 +390,19 @@ export default function App() {
           products: products,
           ingredients: ingredients,
         }),
-      });
+      }).catch(() => null);
 
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
+      if (response && response.ok) {
+        const raw = await response.json();
+        const safe = normalizeForecastResult(raw, fallback);
+        setForecast(safe);
+        supabaseSync.syncForecast(safe);
+      } else {
+        setForecast(fallback);
+        supabaseSync.syncForecast(fallback);
       }
-
-      const raw = await response.json();
-      const safe = normalizeForecastResult(raw, fallback);
-      setForecast(safe);
-      // Automatically store forecast in Supabase database table `sales_forecasts`
-      supabaseSync.syncForecast(safe);
-    } catch (err) {
-      console.warn('Backend ML engine unreachable, running client forecasting model:', err);
+    } catch {
       setForecast(fallback);
-      // Automatically store fallback forecast in Supabase database table
       supabaseSync.syncForecast(fallback);
     } finally {
       setIsForecasting(false);
@@ -672,28 +422,51 @@ export default function App() {
       };
     }
     setCurrentUser(matchedUser);
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(matchedUser));
+    try {
+      sessionStorage.setItem(SESSION_KEY_USER, JSON.stringify(matchedUser));
+    } catch {}
     adjustTabForRole(role);
   };
 
   // Authentication Handlers
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    try {
+      sessionStorage.setItem(SESSION_KEY_USER, JSON.stringify(user));
+    } catch {}
     adjustTabForRole(user.role);
   };
 
   const handleLogout = () => {
     try {
-      localStorage.removeItem(STORAGE_KEY_USER);
-    } catch (e) {
-      // ignore
-    }
+      sessionStorage.removeItem(SESSION_KEY_USER);
+    } catch {}
     setCurrentUser(null);
   };
 
   // Calculate low stock items count
   const lowStockCount = ingredients.filter((i) => i.currentStock <= i.reorderLevel).length;
+
+  // Branded initial loading screen while fetching live Supabase data
+  if (isLoadingData) {
+    return (
+      <div className="min-h-screen bg-[#2A1810] flex flex-col items-center justify-center p-6 text-[#F5EDE6] select-none">
+        <div className="relative mb-6">
+          <LatteArtLogo className="w-16 h-16 animate-pulse" />
+          <div className="absolute -inset-2 bg-amber-500/10 blur-xl rounded-full" />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-[#FAF6F2]">
+          KENNY Brew Intelligence
+        </h1>
+        <p className="text-xs text-[#C5A880] mt-1.5 font-medium tracking-wide">
+          Connecting to Supabase Cloud Database...
+        </p>
+        <div className="w-36 h-1 bg-[#3E2417] rounded-full overflow-hidden mt-5">
+          <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full animate-[pulse_1.5s_ease-in-out_infinite]" />
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <LoginView onLoginSuccess={handleLoginSuccess} usersList={usersList} />;
@@ -771,8 +544,8 @@ export default function App() {
             />
           )}
 
-          {/* Staff Accounts & Permissions */}
-          {activeTab === 'users' && (
+          {/* Staff Accounts & Permissions - Shop Owner Only */}
+          {activeTab === 'users' && currentUser?.role === 'owner' && (
             <UserAccountsView
               currentUser={currentUser}
               users={usersList}

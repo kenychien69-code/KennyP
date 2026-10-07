@@ -8,8 +8,7 @@ interface LoginViewProps {
   usersList?: User[];
 }
 
-export const SHARED_PASSWORD = 'kenny123';
-const ACCEPTED_PASSWORDS = [SHARED_PASSWORD, 'password123', 'admin123', 'owner123', '123456'];
+export const DEFAULT_PASSWORD = 'kenny123';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList = [] }) => {
   const [username, setUsername] = useState('');
@@ -38,60 +37,60 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
     setIsLoading(true);
 
     // 1. Check if Shop Owner / Admin account
-    if (
+    const isOwnerLogin =
       cleanUsername === 'owner' ||
       cleanUsername === 'admin' ||
       cleanUsername === 'shopowner' ||
       cleanUsername === 'kenychien' ||
-      cleanUsername === 'kenychien69'
-    ) {
-      if (!ACCEPTED_PASSWORDS.includes(cleanPassword)) {
+      cleanUsername === 'kenychien69' ||
+      cleanUsername === 'keny';
+
+    if (isOwnerLogin) {
+      // Find owner in usersList to see if a custom password was saved
+      const ownerUser = usersList.find(
+        (u) =>
+          u.role === 'owner' ||
+          (u.username && ['owner', 'admin', 'shopowner'].includes(u.username.toLowerCase()))
+      );
+      const ownerExpectedPassword = (ownerUser?.password || DEFAULT_PASSWORD).trim();
+
+      if (cleanPassword !== ownerExpectedPassword) {
         setIsLoading(false);
         setError('Incorrect password. Please verify your credentials.');
         return;
       }
 
       onLoginSuccess({
-        id: 'usr-owner',
+        id: ownerUser?.id || 'usr-owner',
         username: 'owner',
         role: 'owner',
-        fullName: 'Keny Chien',
+        fullName: ownerUser?.fullName || 'Keny Chien',
         roleTitle: 'Shop Owner',
+        password: ownerExpectedPassword,
       });
       return;
     }
 
-    // 1.5 Check if default/demo Store Manager account
-    if (cleanUsername === 'manager' || cleanUsername === 'storemanager') {
-      if (!ACCEPTED_PASSWORDS.includes(cleanPassword)) {
-        setIsLoading(false);
-        setError('Incorrect password. Please verify your credentials.');
-        return;
-      }
-
-      onLoginSuccess({
-        id: 'usr-manager',
-        username: 'manager',
-        role: 'manager',
-        fullName: 'Maria Santos (Store Manager)',
-        roleTitle: 'Store Manager',
-      });
-      return;
-    }
-
-    // 2. Check if created staff member in usersList
-    const staffMatch = usersList.find(
-      (u) => String(u?.username || '').trim().toLowerCase() === cleanUsername
-    );
+    // 2. Check if registered staff member in usersList from Supabase
+    const staffMatch = usersList.find((u) => {
+      const uName = String(u?.username || '').trim().toLowerCase();
+      const fName = String(u?.fullName || '').trim().toLowerCase();
+      const uRole = String(u?.role || '').trim().toLowerCase();
+      const firstName = fName.split(' ')[0];
+      return (
+        uName === cleanUsername ||
+        fName === cleanUsername ||
+        firstName === cleanUsername ||
+        uRole === cleanUsername ||
+        cleanUsername === `${uName}@kennybrew.com` ||
+        uName.includes(cleanUsername)
+      );
+    });
 
     if (staffMatch) {
-      // Check user specific password or accepted default passwords
-      const validPasswords = [
-        ...(staffMatch.password ? [staffMatch.password.trim()] : []),
-        ...ACCEPTED_PASSWORDS,
-      ];
+      const expectedPassword = (staffMatch.password || DEFAULT_PASSWORD).trim();
 
-      if (!validPasswords.includes(cleanPassword)) {
+      if (cleanPassword !== expectedPassword) {
         setIsLoading(false);
         setError('Incorrect password. Please verify your credentials.');
         return;
@@ -109,6 +108,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, usersList 
             : staffMatch.role === 'manager'
             ? 'Store Manager'
             : 'Cashier / Barista'),
+        password: expectedPassword,
       });
       return;
     }

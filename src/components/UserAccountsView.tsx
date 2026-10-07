@@ -7,7 +7,6 @@ import {
   KeyRound,
   Trash2,
   Edit2,
-  Clock,
   Check,
   ShieldAlert,
   Briefcase,
@@ -145,7 +144,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
 
     onAddUser(newUser, formPassword.trim() || 'kenny123');
     setIsAddModalOpen(false);
-    showNotice(`Added ${ROLE_PERMISSIONS[formRole].title} @${newUser.username} · Stored to Supabase "users" table`);
+    showNotice(`Added ${ROLE_PERMISSIONS[formRole].title} @${newUser.username}`);
   };
 
   const handleSubmitEdit = (e: React.FormEvent) => {
@@ -260,14 +259,13 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                   <th className="py-3 px-4">Staff Member</th>
                   <th className="py-3 px-4">Assigned Role</th>
                   <th className="py-3 px-4">System Access</th>
-                  <th className="py-3 px-4">Last Activity</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EFEAE2]">
                 {filteredStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-[#8C7355]">
+                    <td colSpan={4} className="py-8 text-center text-xs text-[#8C7355]">
                       No staff accounts found matching your search.
                     </td>
                   </tr>
@@ -301,13 +299,6 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
 
                         <td className="py-3.5 px-4 text-[#7A6452] text-[11px]">
                           {roleMeta.description}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-[#7A6452] text-[11px]">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-[#A89078]" />
-                            <span>{u.lastLogin || 'Never'}</span>
-                          </div>
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
@@ -412,8 +403,8 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                 </select>
                 <p className="text-[11px] text-[#8C7355] mt-1">
                   {formRole === 'manager'
-                    ? 'Store Managers can access Dashboard, POS Terminal, Inventory, Sales Reports & AI Forecasts.'
-                    : 'Cashiers & Baristas are focused on customer orders at the POS register.'}
+                    ? 'Store Managers can run Dashboard, POS, Products & Inventory, Sales Reports, and AI Forecasts. Staff Management is reserved for the Shop Owner.'
+                    : 'Cashiers & Baristas can only access the POS Terminal register for customer orders.'}
                 </p>
               </div>
 

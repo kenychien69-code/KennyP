@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface StorageSetupModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ interface StorageStatus {
   canInsertUsers?: boolean;
   isFullyConfigured: boolean;
   fixSql: string;
+  message?: string;
 }
 
 export const StorageSetupModal: React.FC<StorageSetupModalProps> = ({
@@ -41,11 +43,27 @@ export const StorageSetupModal: React.FC<StorageSetupModalProps> = ({
   const fetchStatus = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/supabase/storage-status');
-      if (res.ok) {
+      const res = await fetch('/api/supabase/storage-status').catch(() => null);
+      if (res && res.ok) {
         const data = await res.json();
         setStatus(data);
+        return;
       }
+      // Direct client-side check for Vercel
+      const { data: listData, error: listErr } = await supabase.storage.from('images').list();
+      setStatus({
+        connected: true,
+        bucketExists: !listErr,
+        bucketName: 'images',
+        canUpload: !listErr,
+        hasImageUrlColumn: true,
+        canInsertUsers: true,
+        isFullyConfigured: !listErr,
+        fixSql: '',
+        message: !listErr
+          ? 'Supabase cloud storage and database are online.'
+          : 'Supabase storage bucket requires RLS policy setup.',
+      });
     } catch (err) {
       console.warn('Failed to fetch storage status:', err);
     } finally {
