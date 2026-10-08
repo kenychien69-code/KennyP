@@ -109,6 +109,10 @@ export default function App() {
 
     async function loadFromSupabase() {
       setIsLoadingData(true);
+      const timer = setTimeout(() => {
+        if (isMounted) setIsLoadingData(false);
+      }, 800);
+
       try {
         await supabaseSync.checkConnection();
         const remote = await supabaseSync.pullData();
@@ -144,6 +148,7 @@ export default function App() {
       } catch (err) {
         console.warn('Failed to load live data from Supabase:', err);
       } finally {
+        clearTimeout(timer);
         if (isMounted) {
           setIsLoadingData(false);
         }
@@ -447,7 +452,7 @@ export default function App() {
   // Calculate low stock items count
   const lowStockCount = ingredients.filter((i) => i.currentStock <= i.reorderLevel).length;
 
-  // Branded initial loading screen while fetching live Supabase data
+  // Branded initial loading screen while fetching live data
   if (isLoadingData) {
     return (
       <div className="min-h-screen bg-[#2A1810] flex flex-col items-center justify-center p-6 text-[#F5EDE6] select-none">
@@ -458,9 +463,6 @@ export default function App() {
         <h1 className="text-xl font-bold tracking-tight text-[#FAF6F2]">
           KENNY Brew Intelligence
         </h1>
-        <p className="text-xs text-[#C5A880] mt-1.5 font-medium tracking-wide">
-          Connecting to Supabase Cloud Database...
-        </p>
         <div className="w-36 h-1 bg-[#3E2417] rounded-full overflow-hidden mt-5">
           <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full animate-[pulse_1.5s_ease-in-out_infinite]" />
         </div>
