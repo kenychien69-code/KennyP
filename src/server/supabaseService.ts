@@ -601,12 +601,10 @@ export async function pullAllFromSupabase() {
       (u.email || '').toLowerCase().startsWith('owner@')
   );
 
-  const ownerName =
-    rawOwner?.name &&
-    rawOwner.name !== 'Shop Owner' &&
-    rawOwner.name !== 'Keny Chien'
-      ? rawOwner.name
-      : 'Keny Chien';
+  const rawOwnerName = rawOwner?.name || 'Kenny Chien';
+  const ownerName = rawOwnerName
+    .replace(/\s*\([^)]*\)/g, '')
+    .trim() || 'Kenny Chien';
 
   const shopOwnerUser = {
     id: rawOwner?.user_id != null ? `usr-${rawOwner.user_id}` : 'usr-owner',

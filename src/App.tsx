@@ -37,7 +37,7 @@ const INITIAL_STAFF_USERS: User[] = [
     id: 'usr-owner',
     username: 'owner',
     role: 'owner',
-    fullName: 'Keny Chien',
+    fullName: 'Kenny Chien',
     roleTitle: 'Shop Owner',
     lastLogin: 'Today',
     createdAt: '2026-01-01',
@@ -71,8 +71,11 @@ export default function App() {
       const saved = sessionStorage.getItem(SESSION_KEY_USER);
       if (saved) {
         const parsed: any = JSON.parse(saved);
+        if (parsed.fullName) {
+          parsed.fullName = String(parsed.fullName).replace(/\s*\([^)]*\)/g, '').trim();
+        }
         if (parsed.role === 'owner') {
-          parsed.fullName = 'Keny Chien';
+          parsed.fullName = 'Kenny Chien';
         }
         return parsed as User;
       }
@@ -132,6 +135,17 @@ export default function App() {
           }
           if (remote.users && remote.users.length > 0) {
             setUsersList(remote.users);
+            setCurrentUser((prev) => {
+              if (!prev) return null;
+              const matched = remote.users.find(
+                (u) => (u.username || '').toLowerCase() === (prev.username || '').toLowerCase()
+              );
+              if (matched) {
+                const cleanName = String(matched.fullName).replace(/\s*\([^)]*\)/g, '').trim();
+                return { ...prev, ...matched, fullName: cleanName };
+              }
+              return { ...prev, fullName: String(prev.fullName).replace(/\s*\([^)]*\)/g, '').trim() };
+            });
           }
           if (remote.historicalSales && remote.historicalSales.length > 0) {
             setHistoricalSales(remote.historicalSales);

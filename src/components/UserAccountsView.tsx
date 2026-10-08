@@ -281,7 +281,7 @@ export const UserAccountsView: React.FC<UserAccountsViewProps> = ({
                             </div>
                             <div>
                               <div className="font-bold text-[#2A1810] flex items-center gap-1.5">
-                                <span>{u.fullName || (u as any).name || u.username || 'Staff Member'}</span>
+                                <span>{String(u.fullName || (u as any).name || u.username || 'Staff Member').replace(/\s*\([^)]*\)/g, '').trim()}</span>
                               </div>
                               <div className="text-[11px] text-[#7A6452] font-mono">@{u.username || 'staff'}</div>
                             </div>

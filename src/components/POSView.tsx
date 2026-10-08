@@ -64,15 +64,15 @@ export const POSView: React.FC<POSViewProps> = ({
   const [amountTendered, setAmountTendered] = useState<number>(0);
   const [completedOrderForReceipt, setCompletedOrderForReceipt] = useState<Order | null>(null);
 
-  // Specific Cashier on duty (defaults to logged-in user full name)
+  // Specific Cashier on duty (defaults to logged-in user full name without parenthetical labels)
   const [cashierOnDuty, setCashierOnDuty] = useState<string>(() => {
-    return currentUser.fullName || 'Cashier';
+    return (currentUser.fullName || 'Cashier').replace(/\s*\([^)]*\)/g, '').trim();
   });
   const [isEditingCashierOnDuty, setIsEditingCashierOnDuty] = useState(false);
 
   useEffect(() => {
     if (currentUser.fullName && currentUser.fullName !== 'Cashier Staff') {
-      setCashierOnDuty(currentUser.fullName);
+      setCashierOnDuty(currentUser.fullName.replace(/\s*\([^)]*\)/g, '').trim());
     }
   }, [currentUser]);
 
@@ -326,7 +326,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 />
               ) : (
                 <span className="font-bold text-[#2A1810] truncate max-w-[155px]">
-                  {cashierOnDuty}
+                  {cashierOnDuty.replace(/\s*\([^)]*\)/g, '').trim()}
                 </span>
               )}
             </div>

@@ -159,7 +159,8 @@ export class SupabaseSyncService {
       const users: User[] = rawUsers.map((ru: any) => {
         const email = String(ru.email || '').toLowerCase().trim();
         const roleRaw = String(ru.role || '').toLowerCase().trim();
-        const fullName = ru.name || ru.full_name || 'Staff Member';
+        const rawName = ru.name || ru.full_name || 'Staff Member';
+        const fullName = String(rawName).replace(/\s*\([^)]*\)/g, '').trim() || 'Staff Member';
 
         let username = '';
         if (ru.username) {
@@ -190,7 +191,7 @@ export class SupabaseSyncService {
           id: 'usr-owner',
           username: 'owner',
           role: 'owner',
-          fullName: 'Keny Chien',
+          fullName: 'Kenny Chien',
           roleTitle: 'Shop Owner',
           lastLogin: 'Today',
           createdAt: '2026-01-01',
@@ -202,7 +203,9 @@ export class SupabaseSyncService {
       const orders: Order[] = rawOrders.map((o: any) => {
         const orderId = String(o.order_id != null ? o.order_id : o.id || '');
         const matchedUser = rawUsers.find((u: any) => u.user_id === o.user_id);
-        const cashierName = matchedUser?.name || 'Cashier';
+        const cashierName = matchedUser?.name
+          ? String(matchedUser.name).replace(/\s*\([^)]*\)/g, '').trim()
+          : 'Cashier';
 
         const items = rawOrderItems
           .filter((item: any) => String(item.order_id) === String(orderId))

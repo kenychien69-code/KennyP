@@ -32,7 +32,9 @@ export const TopBar: React.FC<TopBarProps> = ({
       {/* Right Actions */}
       <div className="flex items-center gap-3">
         <div className="text-right hidden sm:block">
-          <div className="text-xs font-bold text-[#F7E7D9]">{currentUser.fullName}</div>
+          <div className="text-xs font-bold text-[#F7E7D9]">
+            {currentUser.fullName ? currentUser.fullName.replace(/\s*\([^)]*\)/g, '').trim() : 'Store Staff'}
+          </div>
           <div className="text-[10px] text-[#C4A48A]">{currentUser.roleTitle || 'Store Staff'}</div>
         </div>
 

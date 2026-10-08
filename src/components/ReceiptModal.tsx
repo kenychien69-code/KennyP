@@ -65,7 +65,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const cashierName =
     order.cashierName && order.cashierName !== 'Cashier Staff'
-      ? order.cashierName
+      ? order.cashierName.replace(/\s*\([^)]*\)/g, '').trim()
       : 'Store Cashier';
 
   const orderDate = new Date(order.createdAt);
